@@ -1,0 +1,17 @@
+{
+	"name": "claude-project-flow",
+	"owner": {
+		"name": "Matteo"
+	},
+	"metadata": {
+		"description": "Project workflow plugin for Claude Code"
+	},
+	"plugins": [
+		{
+			"name": "claude-project-flow",
+			"version": "0.1.0",
+			"source": "./plugin",
+			"description": "Feature lifecycle, knowledge base, and cross-project search"
+		}
+	]
+}
