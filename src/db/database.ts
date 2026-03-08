@@ -1,5 +1,5 @@
 import Database from 'better-sqlite3';
-import { existsSync, mkdirSync } from 'fs';
+import { existsSync, mkdirSync, writeFileSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
 import { SCHEMA } from './schema.js';
@@ -24,24 +24,30 @@ export function getDb(): Database.Database {
 	return db;
 }
 
+export const SETTINGS_PATH = join(DATA_DIR, 'settings.json');
+
 export function getSettings(): Settings {
-	const settingsPath = join(DATA_DIR, 'settings.json');
-	if (!existsSync(settingsPath)) {
+	if (!existsSync(SETTINGS_PATH)) {
 		const defaults: Settings = {
 			knowledge_paths: [],
-			projects: {},
-			feature_docs_location: 'repo'
+			default_projects_path: '',
+			project_overrides: {},
 		};
-		const { writeFileSync } = require('fs');
-		writeFileSync(settingsPath, JSON.stringify(defaults, null, '\t') + '\n');
+		writeFileSync(SETTINGS_PATH, JSON.stringify(defaults, null, '\t') + '\n');
 		return defaults;
 	}
-	const { readFileSync } = require('fs');
-	return JSON.parse(readFileSync(settingsPath, 'utf-8'));
+	return JSON.parse(readFileSync(SETTINGS_PATH, 'utf-8'));
+}
+
+export function saveSettings(settings: Settings): void {
+	writeFileSync(SETTINGS_PATH, JSON.stringify(settings, null, '\t') + '\n');
 }
 
 export interface Settings {
+	// paths to shared knowledge MD files (cross-project patterns, conventions, libraries)
 	knowledge_paths: string[];
-	projects: Record<string, string>;
-	feature_docs_location: 'repo' | 'local';
+	// default path where project feature docs are stored
+	default_projects_path: string;
+	// per-project path overrides (project name → custom path)
+	project_overrides: Record<string, string>;
 }

@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install)",
+      "Bash(npm run build)",
+      "Bash(node /Users/matteo/Documents/GitHub/VBA/Claude/claude-project-flow/plugin/scripts/service.cjs hook session-start)",
+      "Read(//Users/matteo/.claude/**)",
+      "Read(//Users/matteo/**)",
+      "WebSearch",
+      "Bash(cp plugin/.mcp.json .)",
+      "Bash(cp -r plugin/hooks .)",
+      "Bash(cp -r plugin/skills .)",
+      "Bash(claude plugin disable --help)",
+      "Bash(find /Users/matteo/Documents/GitHub/VBA/Claude/claude-project-flow -name \"SKILL.md\" -exec head -5 {} + -print)"
+    ],
+    "additionalDirectories": [
+      "/Users/matteo/Documents/GitHub/VBA/Claude/VectorMemory/commands",
+      "/Users/matteo/.claude",
+      "/Users/matteo"
+    ]
+  }
+}

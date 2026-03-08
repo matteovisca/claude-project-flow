@@ -1,6 +1,6 @@
 node_modules/
 dist/
-plugin/scripts/*.cjs
+scripts/dist/
 *.db
 *.db-journal
 .env

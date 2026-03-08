@@ -1,5 +1,5 @@
 import { build } from 'esbuild';
-import { readFileSync, copyFileSync, mkdirSync } from 'fs';
+import { readFileSync, writeFileSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -16,7 +16,7 @@ await build({
 	platform: 'node',
 	target: 'node18',
 	format: 'cjs',
-	outfile: resolve(root, 'plugin/scripts/service.cjs'),
+	outfile: resolve(root, 'scripts/dist/service.cjs'),
 	minify: true,
 	logLevel: 'error',
 	external: ['better-sqlite3'],
@@ -29,10 +29,9 @@ await build({
 });
 
 // Sync version in plugin manifest
-const pluginJson = resolve(root, 'plugin/.claude-plugin/plugin.json');
+const pluginJson = resolve(root, '.claude-plugin/plugin.json');
 const manifest = JSON.parse(readFileSync(pluginJson, 'utf-8'));
 manifest.version = pkg.version;
-const { writeFileSync } = await import('fs');
 writeFileSync(pluginJson, JSON.stringify(manifest, null, '\t') + '\n');
 
-console.log(`Build complete: plugin/scripts/service.cjs`);
+console.log(`Build complete: scripts/dist/service.cjs`);

@@ -4,7 +4,8 @@ import {
 	CallToolRequestSchema,
 	ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { getDb } from '../db/database.js';
+import { getDb, getSettings, saveSettings } from '../db/database.js';
+import { runSessionStart } from '../hooks/session-start.js';
 
 declare const __VERSION__: string;
 
@@ -94,6 +95,34 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
 				},
 				required: ['name', 'path']
 			}
+		},
+		{
+			name: 'settings_get',
+			description: 'Get current plugin settings (knowledge paths, default projects path, per-project overrides)',
+			inputSchema: { type: 'object', properties: {} }
+		},
+		{
+			name: 'settings_update',
+			description: 'Update plugin settings. Pass only the fields you want to change.',
+			inputSchema: {
+				type: 'object',
+				properties: {
+					knowledge_paths: {
+						type: 'array',
+						items: { type: 'string' },
+						description: 'Paths to shared knowledge MD files (cross-project)'
+					},
+					default_projects_path: {
+						type: 'string',
+						description: 'Default base directory for project feature docs'
+					},
+					project_overrides: {
+						type: 'object',
+						description: 'Per-project path overrides (project name → custom path)',
+						additionalProperties: { type: 'string' }
+					}
+				}
+			}
 		}
 	]
 }));
@@ -182,6 +211,22 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 				return { content: [{ type: 'text', text: `Project "${args!.name}" registered (id: ${result.lastInsertRowid})` }] };
 			}
 
+			case 'settings_get': {
+				const settings = getSettings();
+				return { content: [{ type: 'text', text: JSON.stringify(settings, null, 2) }] };
+			}
+
+			case 'settings_update': {
+				const current = getSettings();
+				if (Array.isArray(args?.knowledge_paths)) current.knowledge_paths = args.knowledge_paths as string[];
+				if (typeof args?.default_projects_path === 'string') current.default_projects_path = args.default_projects_path;
+				if (args?.project_overrides && typeof args.project_overrides === 'object') {
+					current.project_overrides = { ...current.project_overrides, ...(args.project_overrides as Record<string, string>) };
+				}
+				saveSettings(current);
+				return { content: [{ type: 'text', text: `Settings updated:\n${JSON.stringify(current, null, 2)}` }] };
+			}
+
 			default:
 				return { content: [{ type: 'text', text: `Unknown tool: ${name}` }], isError: true };
 		}
@@ -191,24 +236,27 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 });
 
 // Hook CLI mode
-const cliArg = process.argv[2];
-if (cliArg === 'hook') {
-	const hookName = process.argv[3];
-	switch (hookName) {
-		case 'session-start': {
-			// TODO: detect feature branch, load context
-			console.log('claude-project-flow: session initialized');
-			break;
+async function main() {
+	const cliArg = process.argv[2];
+	if (cliArg === 'hook') {
+		const hookName = process.argv[3];
+		switch (hookName) {
+			case 'session-start': {
+				runSessionStart();
+				break;
+			}
+			case 'session-stop': {
+				// TODO: suggest progress update if on feature branch
+				console.log('claude-project-flow: session ended');
+				break;
+			}
 		}
-		case 'session-stop': {
-			// TODO: suggest progress update if on feature branch
-			console.log('claude-project-flow: session ended');
-			break;
-		}
+		process.exit(0);
+	} else {
+		// MCP server mode
+		const transport = new StdioServerTransport();
+		await server.connect(transport);
 	}
-	process.exit(0);
-} else {
-	// MCP server mode
-	const transport = new StdioServerTransport();
-	await server.connect(transport);
 }
+
+main();
