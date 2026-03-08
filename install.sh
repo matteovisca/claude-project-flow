@@ -41,13 +41,13 @@ echo "  [ok] Dependencies"
 npm run build 2>&1 | tail -1
 echo "  [ok] Build"
 
-if [ ! -f "$SCRIPT_DIR/scripts/dist/service.cjs" ]; then
-	echo "  ERROR Build failed — scripts/dist/service.cjs not found"
+if [ ! -f "$SCRIPT_DIR/plugin/scripts/dist/service.cjs" ]; then
+	echo "  ERROR Build failed — plugin/scripts/dist/service.cjs not found"
 	exit 1
 fi
 
 # quick smoke test
-node "$SCRIPT_DIR/scripts/dist/service.cjs" hook session-start > /dev/null 2>&1 || true
+node "$SCRIPT_DIR/plugin/scripts/dist/service.cjs" hook session-start > /dev/null 2>&1 || true
 echo "  [ok] Smoke test"
 echo ""
 

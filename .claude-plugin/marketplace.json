@@ -6,8 +6,9 @@
 	"plugins": [
 		{
 			"name": "claude-project-flow",
+			"version": "0.1.0",
 			"description": "Project workflow management with feature lifecycle, knowledge base, and cross-project search",
-			"source": "."
+			"source": "./plugin"
 		}
 	]
 }
