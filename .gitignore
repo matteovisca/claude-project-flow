@@ -1,6 +1,4 @@
 node_modules/
-dist/
-scripts/dist/
 *.db
 *.db-journal
 .env

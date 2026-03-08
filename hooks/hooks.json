@@ -6,6 +6,11 @@
 				"hooks": [
 					{
 						"type": "command",
+						"command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/ensure-build.sh\"",
+						"timeout": 60
+					},
+					{
+						"type": "command",
 						"command": "_R=\"${CLAUDE_PLUGIN_ROOT}\"; node \"$_R/scripts/dist/service.cjs\" hook session-start",
 						"timeout": 30
 					}
@@ -19,6 +24,17 @@
 						"type": "command",
 						"command": "_R=\"${CLAUDE_PLUGIN_ROOT}\"; node \"$_R/scripts/dist/service.cjs\" hook session-stop",
 						"timeout": 15
+					}
+				]
+			}
+		],
+		"SessionEnd": [
+			{
+				"hooks": [
+					{
+						"type": "command",
+						"command": "_R=\"${CLAUDE_PLUGIN_ROOT}\"; node \"$_R/scripts/dist/service.cjs\" hook session-end",
+						"timeout": 30
 					}
 				]
 			}

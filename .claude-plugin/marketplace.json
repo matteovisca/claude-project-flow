@@ -1,0 +1,13 @@
+{
+	"name": "claude-project-flow",
+	"owner": {
+		"name": "Matteo"
+	},
+	"plugins": [
+		{
+			"name": "claude-project-flow",
+			"description": "Project workflow management with feature lifecycle, knowledge base, and cross-project search",
+			"source": "."
+		}
+	]
+}
