@@ -2,10 +2,11 @@
 set -euo pipefail
 
 # claude-project-flow — Install Script
-# Build, register as marketplace plugin, permanent loading on every session
+# Build, register as marketplace plugin, configure permissions
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_NAME="claude-project-flow"
+MARKETPLACE_NAME="matteovisca"
 
 echo "=== $PLUGIN_NAME — Install ==="
 echo "Source: $SCRIPT_DIR"
@@ -22,10 +23,8 @@ fi
 echo "  [ok] Node.js $(node -v)"
 
 if ! command -v claude &> /dev/null; then
-	echo "  ERROR comando 'claude' non trovato nel PATH"
-	exit 1
+	echo "  WARN comando 'claude' non trovato nel PATH — necessario per registrazione plugin"
 fi
-echo "  [ok] Claude Code CLI"
 
 if ! command -v jq &> /dev/null; then
 	echo "  WARN jq non trovato — installalo per la gestione automatica dei permessi"
@@ -46,7 +45,7 @@ if [ ! -f "$SCRIPT_DIR/plugin/scripts/dist/service.cjs" ]; then
 	exit 1
 fi
 
-# quick smoke test
+# smoke test
 node "$SCRIPT_DIR/plugin/scripts/dist/service.cjs" hook session-start > /dev/null 2>&1 || true
 echo "  [ok] Smoke test"
 echo ""
@@ -59,7 +58,7 @@ SETTINGS_FILE="$CLAUDE_DIR/settings.json"
 
 # check if already registered
 if [ -f "$SETTINGS_FILE" ] && command -v jq &> /dev/null; then
-	if jq -e ".enabledPlugins[\"$PLUGIN_NAME@$PLUGIN_NAME\"]" "$SETTINGS_FILE" &> /dev/null 2>&1; then
+	if jq -e ".enabledPlugins[\"$PLUGIN_NAME@$MARKETPLACE_NAME\"]" "$SETTINGS_FILE" &> /dev/null 2>&1; then
 		echo "  SKIP  plugin già registrato e abilitato"
 	else
 		echo "  INFO  Plugin non ancora registrato."
@@ -67,16 +66,14 @@ if [ -f "$SETTINGS_FILE" ] && command -v jq &> /dev/null; then
 		echo "  Esegui questi comandi dentro Claude Code:"
 		echo ""
 		echo "    /plugin marketplace add $SCRIPT_DIR"
-		echo "    /plugin install $PLUGIN_NAME@$PLUGIN_NAME"
+		echo "    /plugin install $PLUGIN_NAME@$MARKETPLACE_NAME"
 		echo ""
-		echo "  Oppure in modalità sviluppo (solo questa sessione):"
-		echo "    claude --plugin-dir $SCRIPT_DIR"
 	fi
 else
 	echo "  INFO  Registra il plugin dentro Claude Code:"
 	echo ""
 	echo "    /plugin marketplace add $SCRIPT_DIR"
-	echo "    /plugin install $PLUGIN_NAME@$PLUGIN_NAME"
+	echo "    /plugin install $PLUGIN_NAME@$MARKETPLACE_NAME"
 fi
 echo ""
 
@@ -97,7 +94,6 @@ echo "--- Permissions ---"
 SETTINGS_LOCAL="$CLAUDE_DIR/settings.local.json"
 
 if command -v jq &> /dev/null; then
-	# MCP tool permissions for the plugin
 	PERMS='[
 		"mcp__project-flow__feature_get",
 		"mcp__project-flow__feature_list",
@@ -112,7 +108,6 @@ if command -v jq &> /dev/null; then
 
 	if [ -f "$SETTINGS_LOCAL" ]; then
 		tmp_file="$(mktemp)"
-		echo "$PERMS" | jq '.' > /dev/null 2>&1 # validate JSON
 		jq --argjson new_perms "$PERMS" '
 			.permissions.allow = (
 				(.permissions.allow // []) + $new_perms | unique
@@ -144,7 +139,7 @@ echo "Prossimi passi:"
 echo ""
 echo "  1. Dentro Claude Code, registra il plugin:"
 echo "     /plugin marketplace add $SCRIPT_DIR"
-echo "     /plugin install $PLUGIN_NAME@$PLUGIN_NAME"
+echo "     /plugin install $PLUGIN_NAME@$MARKETPLACE_NAME"
 echo ""
 echo "  2. Configura i path:"
 echo "     /claude-project-flow:setup"

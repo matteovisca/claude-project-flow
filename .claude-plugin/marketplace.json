@@ -1,14 +1,18 @@
 {
-	"name": "claude-project-flow",
+	"name": "matteovisca",
 	"owner": {
-		"name": "Matteo"
+		"name": "Matteo Visca"
+	},
+	"metadata": {
+		"description": "Plugins by Matteo Visca",
+		"homepage": "https://github.com/matteovisca/claude-project-flow"
 	},
 	"plugins": [
 		{
 			"name": "claude-project-flow",
 			"version": "0.1.0",
-			"description": "Project workflow management with feature lifecycle, knowledge base, and cross-project search",
-			"source": "./plugin"
+			"source": "./plugin",
+			"description": "Project workflow management with feature lifecycle, knowledge base, and cross-project search"
 		}
 	]
 }

@@ -3,7 +3,7 @@
 		"project-flow": {
 			"type": "stdio",
 			"command": "node",
-			"args": ["${CLAUDE_PLUGIN_ROOT}/scripts/dist/service.cjs"]
+			"args": ["plugin/scripts/dist/service.cjs"]
 		}
 	}
 }

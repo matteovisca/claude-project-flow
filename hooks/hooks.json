@@ -1,4 +1,5 @@
 {
+	"description": "claude-project-flow lifecycle hooks",
 	"hooks": {
 		"SessionStart": [
 			{
@@ -6,12 +7,12 @@
 				"hooks": [
 					{
 						"type": "command",
-						"command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/ensure-build.sh\"",
-						"timeout": 60
+						"command": "_R=\"${CLAUDE_PLUGIN_ROOT}\"; [ -z \"$_R\" ] && _R=\"$HOME/.claude/plugins/marketplaces/matteovisca/plugin\"; node \"$_R/scripts/smart-install.js\"",
+						"timeout": 120
 					},
 					{
 						"type": "command",
-						"command": "_R=\"${CLAUDE_PLUGIN_ROOT}\"; node \"$_R/scripts/dist/service.cjs\" hook session-start",
+						"command": "_R=\"${CLAUDE_PLUGIN_ROOT}\"; [ -z \"$_R\" ] && _R=\"$HOME/.claude/plugins/marketplaces/matteovisca/plugin\"; node \"$_R/scripts/dist/service.cjs\" hook session-start",
 						"timeout": 30
 					}
 				]
@@ -22,7 +23,7 @@
 				"hooks": [
 					{
 						"type": "command",
-						"command": "_R=\"${CLAUDE_PLUGIN_ROOT}\"; node \"$_R/scripts/dist/service.cjs\" hook session-stop",
+						"command": "_R=\"${CLAUDE_PLUGIN_ROOT}\"; [ -z \"$_R\" ] && _R=\"$HOME/.claude/plugins/marketplaces/matteovisca/plugin\"; node \"$_R/scripts/dist/service.cjs\" hook session-stop",
 						"timeout": 15
 					}
 				]
@@ -33,7 +34,7 @@
 				"hooks": [
 					{
 						"type": "command",
-						"command": "_R=\"${CLAUDE_PLUGIN_ROOT}\"; node \"$_R/scripts/dist/service.cjs\" hook session-end",
+						"command": "_R=\"${CLAUDE_PLUGIN_ROOT}\"; [ -z \"$_R\" ] && _R=\"$HOME/.claude/plugins/marketplaces/matteovisca/plugin\"; node \"$_R/scripts/dist/service.cjs\" hook session-end",
 						"timeout": 30
 					}
 				]

@@ -1,0 +1,13 @@
+{
+	"name": "claude-project-flow-plugin",
+	"version": "0.1.0",
+	"private": true,
+	"description": "Runtime dependencies for claude-project-flow plugin",
+	"type": "module",
+	"dependencies": {
+		"better-sqlite3": "^11.0.0"
+	},
+	"engines": {
+		"node": ">=18.0.0"
+	}
+}
