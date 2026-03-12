@@ -11,6 +11,23 @@ Pull latest changes, verify consistency, perform the merge, integrate documentat
 ## Parameters
 - `$ARGUMENTS` — Feature name (optional, detected from branch)
 
+## Pre-processing scripts
+
+Before starting, run these scripts to gather all context in one shot:
+
+```bash
+# merge readiness check
+node "${CLAUDE_PLUGIN_ROOT}/scripts/dist/git-ops.cjs" merge-check <main_branch> --json
+
+# feature context (requirements, plans, docs state)
+node "${CLAUDE_PLUGIN_ROOT}/scripts/dist/context-loader.cjs" <feature_name> --json
+
+# branch info
+node "${CLAUDE_PLUGIN_ROOT}/scripts/dist/git-ops.cjs" branch-info --json
+```
+
+Parse the JSON outputs and use them throughout the skill instead of running individual git commands or reading files manually. This saves significant tokens.
+
 ## Step 1: Resolve feature and context
 
 1. Detect project name from git root basename
@@ -23,10 +40,10 @@ Pull latest changes, verify consistency, perform the merge, integrate documentat
 ## Step 2: Pre-merge checks
 
 ### 2a: Feature completeness
-Check the feature state:
-- Read `.requirements-status.json` — are requirements complete?
-- Read `.plans-status.json` — are all plans completed?
-- Check if `docs/feature-doc.md` exists — is documentation generated?
+From the `context-loader` output, check:
+- `requirementsStatus.status` — are requirements complete?
+- `plansStatus.plans` — are all plans completed?
+- Check if docs exist in the feature context
 
 If documentation is missing:
 > **La documentazione non è stata generata.**
@@ -142,8 +159,12 @@ If `project-doc-section.md` doesn't exist but `feature-doc.md` does:
 
 ## Step 8: Archive feature docs
 
-In the feature docs directory:
+Use the feature-scaffold script:
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/dist/feature-scaffold.cjs" archive <feature_name> --json
+```
 
+The script handles:
 1. Determine version number (next `vN` in `Archive/`)
 2. Move all root-level content (except `Archive/`) into `Archive/vN/`:
    ```

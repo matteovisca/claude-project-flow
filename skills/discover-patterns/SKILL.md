@@ -19,6 +19,23 @@ When triggered by the hook, discoveries are saved as pending and presented at th
 ## Parameters
 - `$ARGUMENTS` — Feature name (optional, detected from branch)
 
+## Pre-processing scripts
+
+Before analysis, gather structured diff data:
+
+```bash
+# parsed diff with file classifications
+node "${CLAUDE_PLUGIN_ROOT}/scripts/dist/git-ops.cjs" diff <merge-base> --json
+
+# recent commit history
+node "${CLAUDE_PLUGIN_ROOT}/scripts/dist/git-ops.cjs" log 20 --json
+
+# feature context for existing discoveries
+node "${CLAUDE_PLUGIN_ROOT}/scripts/dist/context-loader.cjs" <feature_name> --json
+```
+
+Use the pre-parsed JSON instead of running raw git commands. This eliminates the need for Claude to parse diffs manually.
+
 ## Step 1: Resolve feature and paths
 
 1. Detect project name from git root basename
@@ -29,14 +46,10 @@ When triggered by the hook, discoveries are saved as pending and presented at th
 
 ## Step 2: Gather diff
 
-Determine the scope of changes to analyze:
-
-1. `git diff HEAD` — current uncommitted changes
-2. `git log --oneline -20` — recent commits for context
-3. `git diff <merge-base>..HEAD` — all changes on the feature branch (if on a feature branch)
-
-Also check:
-4. `git diff <merge-base>..HEAD -- package.json package-lock.json requirements.txt Pipfile pyproject.toml Cargo.toml go.mod pom.xml *.csproj` — dependency file changes specifically
+Use pre-processed data from `git-ops.cjs`:
+- The `diff --json` output contains parsed file changes with additions/deletions/status
+- The `log --json` output contains commit history with conventional commit parsing
+- Filter dependency files (package.json, *.csproj, etc.) from the diff output for Step 3a
 
 ## Step 3: Analyze for discoveries
 

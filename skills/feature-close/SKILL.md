@@ -10,6 +10,21 @@ Close a feature that has been abandoned, superseded, or is no longer needed, wit
 ## Parameters
 - `$ARGUMENTS` — Feature name (optional, detected from branch)
 
+## Pre-processing scripts
+
+Load feature context and use scaffold for archiving:
+
+```bash
+# feature state
+node "${CLAUDE_PLUGIN_ROOT}/scripts/dist/context-loader.cjs" <feature_name> --json
+
+# close and archive (after user confirmation)
+node "${CLAUDE_PLUGIN_ROOT}/scripts/dist/feature-scaffold.cjs" close <feature_name> \
+  --reason "<reason>" --status <cancelled|deferred> --json
+```
+
+The close script handles archiving, CLOSURE.md creation, and DB update in one call.
+
 ## Step 1: Resolve feature
 
 1. Detect project name from git root basename

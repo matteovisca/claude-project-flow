@@ -21,11 +21,14 @@ Show a comprehensive overview of all features across all registered projects.
 
 ## Step 2: Enrich with context
 
-For each active (non-closed) feature, read context files to gather progress:
+Use the context-loader script to gather all enrichment data in one call:
 
-- `.requirements-status.json` → coverage %
-- `.plans-status.json` → plan progress (done/total)
-- `context/session-log.md` → date of last session
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/dist/context-loader.cjs" --project <project_name> --json
+```
+
+This returns all features with their requirements status, plan progress, and session info pre-parsed.
+No need to read individual files — the JSON output contains everything needed for the table.
 
 ## Step 3: Display
 

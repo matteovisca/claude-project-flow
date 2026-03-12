@@ -16,6 +16,21 @@ Sync the feature docs to reflect what was actually done.
 ## Parameters
 - `$ARGUMENTS` — Feature name (optional, detected from branch)
 
+## Pre-processing scripts
+
+Before analysis, gather all context with scripts:
+
+```bash
+# commit history and diff since last session
+node "${CLAUDE_PLUGIN_ROOT}/scripts/dist/git-ops.cjs" log 20 --json
+node "${CLAUDE_PLUGIN_ROOT}/scripts/dist/git-ops.cjs" diff <merge-base> --json
+
+# full feature context (requirements, plans, status files, session log)
+node "${CLAUDE_PLUGIN_ROOT}/scripts/dist/context-loader.cjs" <feature_name> --json
+```
+
+Use the pre-parsed JSON for all analysis instead of reading files and running git commands individually.
+
 ## Step 1: Resolve feature and paths
 
 1. Detect project name from git root basename
@@ -189,3 +204,22 @@ Call `project_flow__feature_update` with the new status.
 >
 > **Prossima sessione:**
 > - <top priority items from open items>
+
+
+## Document Signing
+
+After writing or modifying any markdown file in the feature directory, sign it using the sign script:
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/dist/sign.cjs" footer "<file_path>" "<brief description of change>"
+```
+
+If `CLAUDE_PLUGIN_ROOT` is not set, use the fallback: `$HOME/.claude/plugins/marketplaces/matteovisca/plugin/scripts/dist/sign.cjs`
+
+For inline modification tags, get the tag and insert it at the modification point:
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/dist/sign.cjs" tag
+```
+Output example: `<!-- @matteovisca 2026-03-09 -->`
+
+Insert the tag on the line immediately after the modified section heading or paragraph.

@@ -5,6 +5,7 @@ import {
 	ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { getDb, getSettings, saveSettings } from '../db/database.js';
+import { getGitUserName } from '../utils/git-user.js';
 import { runSessionStart } from '../hooks/session-start.js';
 import { runSessionStop } from '../hooks/session-stop.js';
 import { runSessionEnd } from '../hooks/session-end.js';
@@ -174,6 +175,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 					'SELECT id, status FROM features WHERE project_id = ? AND name = ? AND closed_at IS NULL'
 				).get(projectRow.id, args!.name) as any;
 
+				const gitUser = getGitUserName();
+
 				if (existing) {
 					// check status hierarchy — prevent going backwards
 					if (args?.status) {
@@ -191,6 +194,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 					if (statusValue) { updates.push('status = ?'); params.push(statusValue); }
 					if (args?.branch) { updates.push('branch = ?'); params.push(args.branch); }
 					if (statusValue === 'closed' || statusValue === 'cancelled') { updates.push("closed_at = datetime('now')"); }
+					if (gitUser) { updates.push('last_modified_by = ?'); params.push(gitUser); }
 					if (updates.length === 0) {
 						return { content: [{ type: 'text', text: 'No updates provided' }] };
 					}
@@ -198,10 +202,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 					db.prepare(`UPDATE features SET ${updates.join(', ')} WHERE id = ?`).run(...params);
 					return { content: [{ type: 'text', text: `Feature "${args!.name}" updated (${existing.status} → ${statusValue ?? existing.status})` }] };
 				} else {
-					// insert
+					// insert — set author on creation
 					const result = db.prepare(
-						'INSERT INTO features (project_id, name, branch, status) VALUES (?, ?, ?, ?)'
-					).run(projectRow.id, args!.name, args?.branch ?? null, args?.status ?? 'draft');
+						'INSERT INTO features (project_id, name, branch, status, author, last_modified_by) VALUES (?, ?, ?, ?, ?, ?)'
+					).run(projectRow.id, args!.name, args?.branch ?? null, args?.status ?? 'draft', gitUser, gitUser);
 					return { content: [{ type: 'text', text: `Feature "${args!.name}" created (id: ${result.lastInsertRowid})` }] };
 				}
 			}

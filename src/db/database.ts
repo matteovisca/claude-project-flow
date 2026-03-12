@@ -20,6 +20,7 @@ export function getDb(): Database.Database {
 	db.pragma('journal_mode = WAL');
 	db.pragma('foreign_keys = ON');
 	db.exec(SCHEMA);
+	runMigrations(db);
 
 	return db;
 }
@@ -41,6 +42,18 @@ export function getSettings(): Settings {
 
 export function saveSettings(settings: Settings): void {
 	writeFileSync(SETTINGS_PATH, JSON.stringify(settings, null, '\t') + '\n');
+}
+
+function runMigrations(db: Database.Database): void {
+	// check if columns exist before adding (idempotent)
+	const cols = db.prepare("PRAGMA table_info('features')").all() as { name: string }[];
+	const colNames = new Set(cols.map(c => c.name));
+	if (!colNames.has('author')) {
+		db.exec("ALTER TABLE features ADD COLUMN author TEXT");
+	}
+	if (!colNames.has('last_modified_by')) {
+		db.exec("ALTER TABLE features ADD COLUMN last_modified_by TEXT");
+	}
 }
 
 export interface Settings {

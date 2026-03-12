@@ -20,6 +20,8 @@ CREATE TABLE IF NOT EXISTS features (
 	plan_path TEXT,
 	progress_path TEXT,
 	changelog_path TEXT,
+	author TEXT,
+	last_modified_by TEXT,
 	created_at TEXT DEFAULT (datetime('now')),
 	closed_at TEXT,
 	UNIQUE(project_id, name, version)

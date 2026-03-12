@@ -10,6 +10,16 @@ Generate a documentation file for the feature, synthesizing requirements, plans,
 ## Parameters
 - `$ARGUMENTS` — Feature name (optional, detected from branch)
 
+## Pre-processing scripts
+
+Before generating documentation, load all feature context in one call:
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/dist/context-loader.cjs" <feature_name> --json
+```
+
+This returns definition, requirements, plans, session logs, and discoveries pre-parsed. Use this JSON for all documentation generation instead of reading files individually.
+
 ## Step 1: Resolve feature and paths
 
 1. Detect project name from git root basename

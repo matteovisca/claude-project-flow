@@ -1,7 +1,8 @@
 import { build } from 'esbuild';
-import { readFileSync, writeFileSync, cpSync, existsSync } from 'fs';
-import { resolve, dirname } from 'path';
+import { readFileSync, writeFileSync, cpSync, existsSync, readdirSync } from 'fs';
+import { resolve, dirname, join } from 'path';
 import { fileURLToPath } from 'url';
+import { homedir } from 'os';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, '..');
@@ -29,6 +30,107 @@ await build({
 });
 
 console.log('  [ok] service.cjs built');
+
+// Build sync CLI
+await build({
+	entryPoints: [resolve(root, 'src/sync/sync-cli.ts')],
+	bundle: true,
+	platform: 'node',
+	target: 'node18',
+	format: 'cjs',
+	outfile: resolve(root, 'plugin/scripts/dist/sync.cjs'),
+	minify: true,
+	logLevel: 'error',
+	external: ['better-sqlite3'],
+});
+
+console.log('  [ok] sync.cjs built');
+
+// Build sign CLI
+await build({
+	entryPoints: [resolve(root, 'src/utils/sign-cli.ts')],
+	bundle: true,
+	platform: 'node',
+	target: 'node18',
+	format: 'cjs',
+	outfile: resolve(root, 'plugin/scripts/dist/sign.cjs'),
+	minify: true,
+	logLevel: 'error',
+});
+
+console.log('  [ok] sign.cjs built');
+
+// Build context-loader CLI
+await build({
+	entryPoints: [resolve(root, 'src/scripts/context-loader.ts')],
+	bundle: true,
+	platform: 'node',
+	target: 'node18',
+	format: 'cjs',
+	outfile: resolve(root, 'plugin/scripts/dist/context-loader.cjs'),
+	minify: true,
+	logLevel: 'error',
+	external: ['better-sqlite3'],
+});
+
+console.log('  [ok] context-loader.cjs built');
+
+// Build git-ops CLI
+await build({
+	entryPoints: [resolve(root, 'src/scripts/git-ops.ts')],
+	bundle: true,
+	platform: 'node',
+	target: 'node18',
+	format: 'cjs',
+	outfile: resolve(root, 'plugin/scripts/dist/git-ops.cjs'),
+	minify: true,
+	logLevel: 'error',
+});
+
+console.log('  [ok] git-ops.cjs built');
+
+// Build feature-scaffold CLI
+await build({
+	entryPoints: [resolve(root, 'src/scripts/feature-scaffold.ts')],
+	bundle: true,
+	platform: 'node',
+	target: 'node18',
+	format: 'cjs',
+	outfile: resolve(root, 'plugin/scripts/dist/feature-scaffold.cjs'),
+	minify: true,
+	logLevel: 'error',
+	external: ['better-sqlite3'],
+});
+
+console.log('  [ok] feature-scaffold.cjs built');
+
+// Build man CLI
+await build({
+	entryPoints: [resolve(root, 'src/scripts/man.ts')],
+	bundle: true,
+	platform: 'node',
+	target: 'node18',
+	format: 'cjs',
+	outfile: resolve(root, 'plugin/scripts/dist/man.cjs'),
+	minify: true,
+	logLevel: 'error',
+});
+
+console.log('  [ok] man.cjs built');
+
+// Build setup-permissions CLI
+await build({
+	entryPoints: [resolve(root, 'src/scripts/setup-permissions.ts')],
+	bundle: true,
+	platform: 'node',
+	target: 'node18',
+	format: 'cjs',
+	outfile: resolve(root, 'plugin/scripts/dist/setup-permissions.cjs'),
+	minify: true,
+	logLevel: 'error',
+});
+
+console.log('  [ok] setup-permissions.cjs built');
 
 // Sync version in all manifests
 const version = pkg.version;
@@ -81,6 +183,13 @@ const requiredFiles = [
 	'plugin/package.json',
 	'plugin/hooks/hooks.json',
 	'plugin/scripts/dist/service.cjs',
+	'plugin/scripts/dist/sync.cjs',
+	'plugin/scripts/dist/sign.cjs',
+	'plugin/scripts/dist/context-loader.cjs',
+	'plugin/scripts/dist/git-ops.cjs',
+	'plugin/scripts/dist/feature-scaffold.cjs',
+	'plugin/scripts/dist/man.cjs',
+	'plugin/scripts/dist/setup-permissions.cjs',
 	'plugin/scripts/smart-install.js',
 ];
 for (const filePath of requiredFiles) {
@@ -90,4 +199,30 @@ for (const filePath of requiredFiles) {
 }
 console.log('  [ok] all distribution files verified');
 
-console.log(`\nBuild complete.`);
+// Auto-deploy to local plugin cache if installed
+const pluginManifest = JSON.parse(readFileSync(resolve(root, 'plugin/.claude-plugin/plugin.json'), 'utf-8'));
+const pluginName = pluginManifest.name ?? 'claude-project-flow';
+const cacheBase = join(homedir(), '.claude', 'plugins', 'cache');
+
+// search for installed versions of this plugin across all marketplaces
+let deployed = false;
+if (existsSync(cacheBase)) {
+	for (const marketplace of readdirSync(cacheBase, { withFileTypes: true })) {
+		if (!marketplace.isDirectory()) continue;
+		const pluginDir = join(cacheBase, marketplace.name, pluginName);
+		if (!existsSync(pluginDir)) continue;
+		// deploy to each installed version
+		for (const ver of readdirSync(pluginDir, { withFileTypes: true })) {
+			if (!ver.isDirectory()) continue;
+			const target = join(pluginDir, ver.name);
+			cpSync(resolve(root, 'plugin'), target, { recursive: true });
+			console.log(`  [ok] deployed to cache: ${marketplace.name}/${pluginName}/${ver.name}`);
+			deployed = true;
+		}
+	}
+}
+if (!deployed) {
+	console.log('  [--] no local plugin installation found (skip deploy)');
+}
+
+console.log(`\nBuild complete.${deployed ? ' Restart Claude Code to load changes.' : ''}`);

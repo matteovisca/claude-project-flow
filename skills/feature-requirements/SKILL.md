@@ -316,3 +316,22 @@ Call `project_flow__feature_update` with:
 >
 > {if incomplete: "Riprendi con `/claude-project-flow:feature-requirements` nella prossima sessione."}
 > {if complete: "Prossimo passo: pianificazione implementazione."}
+
+
+## Document Signing
+
+After writing or modifying any markdown file in the feature directory, sign it using the sign script:
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/dist/sign.cjs" footer "<file_path>" "<brief description of change>"
+```
+
+If `CLAUDE_PLUGIN_ROOT` is not set, use the fallback: `$HOME/.claude/plugins/marketplaces/matteovisca/plugin/scripts/dist/sign.cjs`
+
+For inline modification tags, get the tag and insert it at the modification point:
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/dist/sign.cjs" tag
+```
+Output example: `<!-- @matteovisca 2026-03-09 -->`
+
+Insert the tag on the line immediately after the modified section heading or paragraph.

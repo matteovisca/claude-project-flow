@@ -73,10 +73,18 @@ Check if the feature directory already exists:
 
 ## Step 6: Create directory structure
 
-Create the feature directory:
+Use the feature-scaffold script to handle directory creation and versioning:
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/dist/feature-scaffold.cjs" init \
+  --name <feature_name> --branch <branch> --desc "<description>" \
+  [--project <project_name>] [--create-branch] --json
+```
+
+The script creates the full directory structure:
 ```
 <resolved_path>/features/<feature_name>/
-├── feature-definition.md    — Generated in step 3
+├── feature-definition.md    — Generated with description and signature
 ├── context/                 — Background info, research, references
 ├── plans/                   — Implementation plans and phases
 ├── requirements/            — Requirements and acceptance criteria
@@ -85,6 +93,8 @@ Create the feature directory:
     ├── v2/                  — Second concluded iteration
     └── ...
 ```
+
+It also handles Step 5 (versioning/archiving) automatically if the directory exists.
 
 ## Step 7: Register in DB
 
@@ -129,3 +139,22 @@ Show the user a summary:
 ## Status
 draft
 ```
+
+
+## Document Signing
+
+After writing or modifying any markdown file in the feature directory, sign it using the sign script:
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/dist/sign.cjs" footer "<file_path>" "<brief description of change>"
+```
+
+If `CLAUDE_PLUGIN_ROOT` is not set, use the fallback: `$HOME/.claude/plugins/marketplaces/matteovisca/plugin/scripts/dist/sign.cjs`
+
+For inline modification tags, get the tag and insert it at the modification point:
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/dist/sign.cjs" tag
+```
+Output example: `<!-- @matteovisca 2026-03-09 -->`
+
+Insert the tag on the line immediately after the modified section heading or paragraph.
