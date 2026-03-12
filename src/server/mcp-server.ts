@@ -59,6 +59,48 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
 			}
 		},
 		{
+			name: 'feature_document_list',
+			description: 'List all documents for a feature',
+			inputSchema: {
+				type: 'object',
+				properties: {
+					project: { type: 'string', description: 'Project name' },
+					feature: { type: 'string', description: 'Feature name' },
+					type: { type: 'string', description: 'Filter by type (requirements|plan|context|doc|closure)' }
+				},
+				required: ['project', 'feature']
+			}
+		},
+		{
+			name: 'feature_document_read',
+			description: 'Read the content of a specific feature document',
+			inputSchema: {
+				type: 'object',
+				properties: {
+					project: { type: 'string' },
+					feature: { type: 'string' },
+					doc_name: { type: 'string', description: 'Document name' },
+					doc_type: { type: 'string', description: 'Document type' }
+				},
+				required: ['project', 'feature', 'doc_name']
+			}
+		},
+		{
+			name: 'feature_document_write',
+			description: 'Create or update a feature document. Creates if it does not exist, updates if it does.',
+			inputSchema: {
+				type: 'object',
+				properties: {
+					project: { type: 'string' },
+					feature: { type: 'string' },
+					doc_name: { type: 'string' },
+					doc_type: { type: 'string', description: 'requirements|plan|context|doc|closure' },
+					content: { type: 'string' }
+				},
+				required: ['project', 'feature', 'doc_name', 'doc_type', 'content']
+			}
+		},
+		{
 			name: 'knowledge_search',
 			description: 'Full-text search across knowledge base (cross-project)',
 			inputSchema: {
@@ -103,7 +145,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
 		},
 		{
 			name: 'settings_get',
-			description: 'Get current plugin settings (knowledge paths, default projects path, per-project overrides)',
+			description: 'Get current plugin settings',
 			inputSchema: { type: 'object', properties: {} }
 		},
 		{
@@ -112,19 +154,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
 			inputSchema: {
 				type: 'object',
 				properties: {
-					knowledge_paths: {
-						type: 'array',
-						items: { type: 'string' },
-						description: 'Paths to shared knowledge MD files (cross-project)'
-					},
-					default_projects_path: {
+					memory_path: {
 						type: 'string',
-						description: 'Default base directory for project feature docs'
-					},
-					project_overrides: {
-						type: 'object',
-						description: 'Per-project path overrides (project name → custom path)',
-						additionalProperties: { type: 'string' }
+						description: 'Base directory for plugin memory (projects and knowledge)'
 					}
 				}
 			}
@@ -210,6 +242,55 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 				}
 			}
 
+			case 'feature_document_list': {
+				const feat = db.prepare(`
+					SELECT f.id FROM features f JOIN projects p ON f.project_id = p.id
+					WHERE p.name = ? AND f.name = ? AND f.closed_at IS NULL
+				`).get(args!.project, args!.feature) as any;
+				if (!feat) return { content: [{ type: 'text', text: `Feature "${args!.feature}" not found in project "${args!.project}"` }], isError: true };
+				let q = 'SELECT id, type, name, LENGTH(content) as size, created_at, updated_at FROM feature_documents WHERE feature_id = ?';
+				const p: any[] = [feat.id];
+				if (args?.type) { q += ' AND type = ?'; p.push(args.type); }
+				q += ' ORDER BY type, name';
+				const docs = db.prepare(q).all(...p);
+				return { content: [{ type: 'text', text: JSON.stringify(docs, null, 2) }] };
+			}
+
+			case 'feature_document_read': {
+				const feat = db.prepare(`
+					SELECT f.id FROM features f JOIN projects p ON f.project_id = p.id
+					WHERE p.name = ? AND f.name = ? AND f.closed_at IS NULL
+				`).get(args!.project, args!.feature) as any;
+				if (!feat) return { content: [{ type: 'text', text: `Feature not found` }], isError: true };
+				let q = 'SELECT * FROM feature_documents WHERE feature_id = ? AND name = ?';
+				const p: any[] = [feat.id, args!.doc_name];
+				if (args?.doc_type) { q += ' AND type = ?'; p.push(args.doc_type); }
+				const doc = db.prepare(q).get(...p) as any;
+				if (!doc) return { content: [{ type: 'text', text: `Document "${args!.doc_name}" not found` }], isError: true };
+				return { content: [{ type: 'text', text: doc.content }] };
+			}
+
+			case 'feature_document_write': {
+				const feat = db.prepare(`
+					SELECT f.id FROM features f JOIN projects p ON f.project_id = p.id
+					WHERE p.name = ? AND f.name = ? AND f.closed_at IS NULL
+				`).get(args!.project, args!.feature) as any;
+				if (!feat) return { content: [{ type: 'text', text: `Feature not found` }], isError: true };
+				const existing = db.prepare(
+					'SELECT id FROM feature_documents WHERE feature_id = ? AND type = ? AND name = ?'
+				).get(feat.id, args!.doc_type, args!.doc_name) as any;
+				if (existing) {
+					db.prepare("UPDATE feature_documents SET content = ?, updated_at = datetime('now') WHERE id = ?")
+						.run(args!.content, existing.id);
+					return { content: [{ type: 'text', text: `Document "${args!.doc_name}" updated` }] };
+				} else {
+					const result = db.prepare(
+						'INSERT INTO feature_documents (feature_id, type, name, content) VALUES (?, ?, ?, ?)'
+					).run(feat.id, args!.doc_type, args!.doc_name, args!.content);
+					return { content: [{ type: 'text', text: `Document "${args!.doc_name}" created (id: ${result.lastInsertRowid})` }] };
+				}
+			}
+
 			case 'knowledge_search': {
 				let query = `
 					SELECT d.id, d.project, d.category, d.file_path, d.title,
@@ -229,98 +310,40 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 			}
 
 			case 'knowledge_index': {
-				const { readdirSync, readFileSync, statSync } = await import('fs');
-				const { join, basename, extname } = await import('path');
 				const { createHash } = await import('crypto');
 
-				// collect all .md files to index
-				const files: { path: string; project?: string; category?: string }[] = [];
+				// index feature documents into knowledge_docs for cross-project search
+				const featureDocs = db.prepare(`
+					SELECT fd.id, fd.type, fd.name, fd.content, f.name as feature_name, p.name as project_name
+					FROM feature_documents fd
+					JOIN features f ON fd.feature_id = f.id
+					JOIN projects p ON f.project_id = p.id
+				`).all() as any[];
 
-				function walkDir(dir: string, project?: string, category?: string) {
-					try {
-						for (const entry of readdirSync(dir, { withFileTypes: true })) {
-							const full = join(dir, entry.name);
-							if (entry.isDirectory() && !entry.name.startsWith('.') && entry.name !== 'Archive') {
-								// infer category from directory name
-								const cat = ['patterns', 'conventions', 'libraries'].includes(entry.name)
-									? entry.name.replace(/s$/, '') : category;
-								walkDir(full, project, cat);
-							} else if (entry.isFile() && extname(entry.name) === '.md') {
-								files.push({ path: full, project, category: category ?? 'general' });
-							}
-						}
-					} catch { /* skip unreadable dirs */ }
-				}
-
-				if (args?.path) {
-					// index a single file or directory
-					const targetPath = args.path as string;
-					try {
-						const stat = statSync(targetPath);
-						if (stat.isFile()) {
-							// single file — infer project and category from path
-							const pathParts = targetPath.split('/');
-							const featIdx = pathParts.indexOf('features');
-							const proj = args?.project as string | undefined ??
-								(featIdx > 0 ? pathParts[featIdx - 1] : undefined);
-							const reqIdx = pathParts.indexOf('requirements');
-							const cat = reqIdx >= 0 ? 'requirement' : 'general';
-							files.push({ path: targetPath, project: proj, category: cat });
-						} else {
-							walkDir(targetPath, args?.project as string | undefined);
-						}
-					} catch (e: any) {
-						return { content: [{ type: 'text', text: `Path not found: ${targetPath}` }], isError: true };
-					}
-				} else {
-					// index all configured knowledge paths
-					const settings = getSettings();
-					for (const kp of settings.knowledge_paths) {
-						walkDir(kp);
-					}
-					// index all project feature requirements
-					if (settings.default_projects_path) {
-						try {
-							for (const projEntry of readdirSync(settings.default_projects_path, { withFileTypes: true })) {
-								if (projEntry.isDirectory()) {
-									const featuresDir = join(settings.default_projects_path, projEntry.name, 'features');
-									walkDir(featuresDir, projEntry.name, 'requirement');
-								}
-							}
-						} catch { /* no projects dir */ }
-					}
-				}
-
-				// upsert each file
 				let indexed = 0;
 				let skipped = 0;
+
 				const upsert = db.prepare(`
-					INSERT INTO knowledge_docs (project, category, file_path, title, content, content_hash)
+					INSERT INTO knowledge_docs (project, category, title, content, content_hash, source)
 					VALUES (?, ?, ?, ?, ?, ?)
-					ON CONFLICT(file_path) DO UPDATE SET
-						project = excluded.project,
-						category = excluded.category,
-						title = excluded.title,
-						content = excluded.content,
-						content_hash = excluded.content_hash,
+					ON CONFLICT(content_hash) DO UPDATE SET
 						updated_at = datetime('now')
-					WHERE content_hash != excluded.content_hash
 				`);
 
-				for (const f of files) {
+				for (const doc of featureDocs) {
+					const hash = createHash('md5').update(doc.content || '').digest('hex');
+					const title = `${doc.project_name}/${doc.feature_name}: ${doc.name}`;
+					const category = doc.type === 'requirements' ? 'requirement' : doc.type;
 					try {
-						const content = readFileSync(f.path, 'utf-8');
-						const hash = createHash('md5').update(content).digest('hex');
-						// extract title from first heading
-						const titleMatch = content.match(/^#\s+(.+)/m);
-						const title = titleMatch?.[1] ?? basename(f.path, '.md');
-						const result = upsert.run(f.project ?? null, f.category, f.path, title, content, hash);
-						if (result.changes > 0) indexed++;
-						else skipped++;
+						// check if already indexed with same hash
+						const existing = db.prepare('SELECT id FROM knowledge_docs WHERE content_hash = ?').get(hash);
+						if (existing) { skipped++; continue; }
+						upsert.run(doc.project_name, category, title, doc.content, hash, 'feature-doc');
+						indexed++;
 					} catch { skipped++; }
 				}
 
-				return { content: [{ type: 'text', text: `Indexed ${indexed} file(s), ${skipped} unchanged/skipped. Total scanned: ${files.length}` }] };
+				return { content: [{ type: 'text', text: `Indexed ${indexed} document(s) from DB, ${skipped} unchanged/skipped. Total: ${featureDocs.length}` }] };
 			}
 
 			case 'project_list': {
@@ -342,11 +365,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
 			case 'settings_update': {
 				const current = getSettings();
-				if (Array.isArray(args?.knowledge_paths)) current.knowledge_paths = args.knowledge_paths as string[];
-				if (typeof args?.default_projects_path === 'string') current.default_projects_path = args.default_projects_path;
-				if (args?.project_overrides && typeof args.project_overrides === 'object') {
-					current.project_overrides = { ...current.project_overrides, ...(args.project_overrides as Record<string, string>) };
-				}
+				if (typeof args?.memory_path === 'string') current.memory_path = args.memory_path;
 				saveSettings(current);
 				return { content: [{ type: 'text', text: `Settings updated:\n${JSON.stringify(current, null, 2)}` }] };
 			}

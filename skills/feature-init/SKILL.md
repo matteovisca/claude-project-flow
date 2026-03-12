@@ -1,160 +1,64 @@
 ---
 name: feature-init
-description: Initialize a new feature — branch, directory structure, definition, and DB tracking
+description: Initialize a new feature — create branch, register in DB with definition
 ---
 
 # Feature Init
 
-Initialize a new feature for the current project.
+Initialize a new feature for the current project. Everything is stored in the SQLite database.
 
 ## Parameters
-- `$ARGUMENTS` — Feature name (optional, will be asked interactively if not provided)
+- `$ARGUMENTS` — Feature name (optional, asked interactively)
 
-## Step 1: Detect project and git state
+## Step 1: Detect project
 
-- Get project name from git root directory basename
-- Check if git is initialized; if not, offer to run `git init`
-- Get current branch name
-- Check if the project is registered in DB via `project_flow__project_list`
-  - If not registered, suggest running `/claude-project-flow:project-init` first
+- Get project name from git root basename
+- Check registration via `feature_list` or `project_list`
+  - If not registered, suggest `/claude-project-flow:project-init` first
+- Get current branch
 
-## Step 2: Branch selection
+## Step 2: Branch
 
-Ask the user:
-
-> Vuoi lavorare sul branch corrente (`<current_branch>`) o creare un nuovo branch?
+> Vuoi lavorare sul branch corrente (`<branch>`) o crearne uno nuovo?
 > 1. Usa il branch corrente
 > 2. Crea un nuovo branch
 
-### Option 1: Current branch
-- Use the current branch as-is
-- If the branch matches `feature/<name>` and `$ARGUMENTS` was not provided, extract the feature name from the branch
+If new branch:
+- Propose `feature/$ARGUMENTS`
+- If uncommitted changes, ask: carry over or commit first
+- `git checkout -b feature/<name>`
 
-### Option 2: New branch
-- If `$ARGUMENTS` is provided, propose `feature/$ARGUMENTS` as branch name
-- If not, ask the user for a feature name first
-- Show the proposed branch name and ask for confirmation/override
-- **Check for pending changes** (`git status`):
-  - If there are uncommitted changes (staged or unstaged), ask the user:
-    > Ci sono modifiche non committate. Cosa vuoi fare?
-    > 1. Porta le modifiche sul nuovo branch (switch diretto)
-    > 2. Committa prima sul branch corrente, poi crea il nuovo branch
-  - Option 1: proceed with `git checkout -b feature/<name>` (changes carry over)
-  - Option 2: guide the user through a commit on the current branch, then create the new branch
-- If no pending changes, create the branch directly: `git checkout -b feature/<name>`
+## Step 3: Feature name and description
 
-## Step 3: Feature naming and description
+- Ask for feature name if not provided
+- Ask for a brief description (2-3 sentences)
+- Draft a `feature-definition.md` content and present for review
 
-- If the feature name wasn't determined yet, ask for it
-- Ask the user for a brief description (2-3 sentences) of what the feature should accomplish
-- Draft a `feature-definition.md` (see template below) and present it for review
-- Incorporate user feedback before saving
+## Step 4: Register in DB
 
-## Step 4: Resolve docs path
-
-1. Call `project_flow__settings_get` to read settings
-2. Check if `project_overrides[project_name]` exists → use that
-3. Otherwise use `default_projects_path/project_name/`
-4. If neither is set, ask the user and suggest running `/claude-project-flow:setup` first
-5. The feature directory will be: `<resolved_path>/features/<feature_name>/`
-
-## Step 5: Handle versioning (Archive)
-
-Check if the feature directory already exists:
-
-### If directory exists (resuming work on same branch):
-1. Count existing `Archive/v*` folders to determine next version number
-2. Move all current root-level content (except `Archive/`) into `Archive/vN/`
-3. Log: `Sessione precedente archiviata in Archive/vN/`
-4. Proceed to create fresh working copy at root
-
-### If directory does not exist:
-- Create it fresh, no archiving needed
-
-## Step 6: Create directory structure
-
-Use the feature-scaffold script to handle directory creation and versioning:
+Use the feature-scaffold script:
 
 ```bash
 node "${CLAUDE_PLUGIN_ROOT}/scripts/dist/feature-scaffold.cjs" init \
-  --name <feature_name> --branch <branch> --desc "<description>" \
-  [--project <project_name>] [--create-branch] --json
+  --name <name> --branch <branch> --desc "<description>" \
+  [--project <project>] [--create-branch] --json
 ```
 
-The script creates the full directory structure:
-```
-<resolved_path>/features/<feature_name>/
-├── feature-definition.md    — Generated with description and signature
-├── context/                 — Background info, research, references
-├── plans/                   — Implementation plans and phases
-├── requirements/            — Requirements and acceptance criteria
-└── Archive/                 — (created only when versioning occurs)
-    ├── v1/                  — First concluded iteration
-    ├── v2/                  — Second concluded iteration
-    └── ...
-```
+This creates the feature in the DB with status `draft` and the definition content.
 
-It also handles Step 5 (versioning/archiving) automatically if the directory exists.
+If the feature name already exists (active), the script bumps the version automatically.
 
-## Step 7: Register in DB
+## Step 5: Knowledge search
 
-1. Call `project_flow__feature_update` with:
-   - `project`: project name
-   - `name`: feature name
-   - `status`: `draft`
-   - `branch`: the branch name (e.g. `feature/<name>`)
-2. If the project is not registered yet, call `project_flow__project_register` first
+Call `feature_document_write` to save the definition, then `knowledge_search` with the feature name to find relevant patterns or prior work.
 
-## Step 8: Knowledge search
+## Step 6: Report
 
-Call `project_flow__knowledge_search` with the feature name and description keywords to find relevant patterns, conventions, or previous similar work.
-
-## Step 9: Report
-
-Show the user a summary:
-- Feature name and branch
-- Docs path created
-- DB registration status
-- Any relevant knowledge found
-- If versioning occurred, mention what was archived
-- Suggest next steps:
-  - `/claude-project-flow:feature-requirements` to define requirements
-  - Start working on the feature directly
-
-## Templates
-
-### feature-definition.md
-```markdown
-# Feature: <name>
-
-## Description
-<!-- 2-3 sentences describing what this feature does and why -->
-
-## Branch
-`feature/<name>`
-
-## Created
-<date>
-
-## Status
-draft
-```
-
-
-## Document Signing
-
-After writing or modifying any markdown file in the feature directory, sign it using the sign script:
-
-```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/dist/sign.cjs" footer "<file_path>" "<brief description of change>"
-```
-
-If `CLAUDE_PLUGIN_ROOT` is not set, use the fallback: `$HOME/.claude/plugins/marketplaces/matteovisca/plugin/scripts/dist/sign.cjs`
-
-For inline modification tags, get the tag and insert it at the modification point:
-```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/dist/sign.cjs" tag
-```
-Output example: `<!-- @matteovisca 2026-03-09 -->`
-
-Insert the tag on the line immediately after the modified section heading or paragraph.
+> **Feature inizializzata: {name}**
+> - Branch: `feature/<name>`
+> - Status: `draft`
+> - DB ID: {id}
+>
+> Prossimi passi:
+> - `/feature-requirements` per definire i requisiti
+> - Inizia a lavorare direttamente

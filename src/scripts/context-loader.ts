@@ -1,259 +1,157 @@
-// loads all context files for a feature into a single structured JSON
-// usage: node context-loader.cjs <feature-dir> [--json]
-//        node context-loader.cjs --project <project-name> [--json]
+// loads all context for a feature from DB into structured JSON
+// usage: node context-loader.cjs <feature-name> [--project <name>] [--json]
+//        node context-loader.cjs --project <name> [--json]
 
-import { readdirSync, readFileSync, existsSync, statSync } from 'fs';
-import { join, basename, extname } from 'path';
-import { getDb, getSettings } from '../db/database.js';
+import { execSync } from 'child_process';
+import { basename } from 'path';
+import { getDb } from '../db/database.js';
 
 interface FeatureContext {
 	featureName: string;
-	featureDir: string;
+	projectName: string;
+	status: string;
+	branch: string | null;
 	definition: string | null;
-	requirements: string | null;
-	requirementsStatus: any | null;
-	plans: PlanInfo[];
-	plansStatus: any | null;
 	sessionLog: string | null;
-	discoveries: any | null;
-	contextFiles: Record<string, string>;
-	dbRecord: any | null;
-}
-
-interface PlanInfo {
-	name: string;
-	content: string;
+	requirementsStatus: any | null;
+	plansStatus: any | null;
+	pendingDiscoveries: any | null;
+	documents: { id: number; type: string; name: string; size: number }[];
+	attachments: { id: number; name: string; mime_type: string; size: number }[];
 }
 
 interface ProjectOverview {
 	projectName: string;
-	projectDir: string;
 	definition: string | null;
+	overview: string | null;
 	features: FeatureContext[];
-	dbRecord: any | null;
 }
 
-function tryReadFile(path: string): string | null {
-	try { return readFileSync(path, 'utf-8'); } catch { return null; }
+function detectProjectName(): string {
+	try {
+		const root = execSync('git rev-parse --show-toplevel', { encoding: 'utf-8', stdio: 'pipe' }).trim();
+		return basename(root);
+	} catch {
+		return basename(process.cwd());
+	}
 }
 
-function tryReadJson(path: string): any | null {
-	try { return JSON.parse(readFileSync(path, 'utf-8')); } catch { return null; }
-}
+function loadFeatureContext(featureId: number): FeatureContext {
+	const db = getDb();
+	const feat = db.prepare(`
+		SELECT f.*, p.name as project_name
+		FROM features f JOIN projects p ON f.project_id = p.id
+		WHERE f.id = ?
+	`).get(featureId) as any;
 
-function isDir(path: string): boolean {
-	try { return statSync(path).isDirectory(); } catch { return false; }
-}
+	const documents = db.prepare(
+		'SELECT id, type, name, LENGTH(content) as size FROM feature_documents WHERE feature_id = ? ORDER BY type, name'
+	).all(featureId) as any[];
 
-function loadFeatureContext(featureDir: string, featureName: string): FeatureContext {
-	const ctx: FeatureContext = {
-		featureName,
-		featureDir,
-		definition: tryReadFile(join(featureDir, 'feature-definition.md')),
-		requirements: tryReadFile(join(featureDir, 'requirements', 'requirements.md')),
-		requirementsStatus: tryReadJson(join(featureDir, 'context', '.requirements-status.json')),
-		plans: [],
-		plansStatus: tryReadJson(join(featureDir, 'context', '.plans-status.json')),
-		sessionLog: tryReadFile(join(featureDir, 'context', 'session-log.md')),
-		discoveries: tryReadJson(join(featureDir, 'context', '.pending-discoveries.json')),
-		contextFiles: {},
-		dbRecord: null,
+	const attachments = db.prepare(
+		'SELECT id, name, mime_type, size FROM feature_attachments WHERE feature_id = ? ORDER BY name'
+	).all(featureId) as any[];
+
+	return {
+		featureName: feat.name,
+		projectName: feat.project_name,
+		status: feat.status,
+		branch: feat.branch,
+		definition: feat.definition,
+		sessionLog: feat.session_log,
+		requirementsStatus: feat.requirements_status ? tryParseJson(feat.requirements_status) : null,
+		plansStatus: feat.plans_status ? tryParseJson(feat.plans_status) : null,
+		pendingDiscoveries: feat.pending_discoveries ? tryParseJson(feat.pending_discoveries) : null,
+		documents,
+		attachments,
 	};
-
-	// load all plans
-	const plansDir = join(featureDir, 'plans');
-	if (isDir(plansDir)) {
-		try {
-			for (const entry of readdirSync(plansDir)) {
-				if (extname(entry) === '.md') {
-					const content = tryReadFile(join(plansDir, entry));
-					if (content) {
-						ctx.plans.push({ name: basename(entry, '.md'), content });
-					}
-				}
-			}
-		} catch { /* skip */ }
-	}
-
-	// load extra context files (non-hidden, non-json)
-	const contextDir = join(featureDir, 'context');
-	if (isDir(contextDir)) {
-		try {
-			for (const entry of readdirSync(contextDir)) {
-				if (entry.startsWith('.') || entry === 'session-log.md') continue;
-				if (extname(entry) === '.md') {
-					const content = tryReadFile(join(contextDir, entry));
-					if (content) ctx.contextFiles[entry] = content;
-				}
-			}
-		} catch { /* skip */ }
-	}
-
-	// load DB record
-	try {
-		const db = getDb();
-		const parts = featureDir.split('/');
-		const featIdx = parts.indexOf('features');
-		const projDir = parts.slice(0, featIdx).pop() ?? '';
-		const projRow = db.prepare('SELECT id FROM projects WHERE name = ?').get(projDir) as any;
-		if (projRow) {
-			ctx.dbRecord = db.prepare(
-				'SELECT * FROM features WHERE project_id = ? AND name = ? ORDER BY version DESC LIMIT 1'
-			).get(projRow.id, featureName);
-		}
-	} catch { /* no DB access */ }
-
-	return ctx;
 }
 
-function loadProjectOverview(projectDir: string, projectName: string): ProjectOverview {
-	const overview: ProjectOverview = {
-		projectName,
-		projectDir,
-		definition: tryReadFile(join(projectDir, 'project-definition.md')),
-		features: [],
-		dbRecord: null,
+function loadProjectOverview(projectId: number): ProjectOverview {
+	const db = getDb();
+	const proj = db.prepare('SELECT * FROM projects WHERE id = ?').get(projectId) as any;
+	const features = db.prepare(
+		'SELECT id FROM features WHERE project_id = ? AND closed_at IS NULL ORDER BY created_at DESC'
+	).all(projectId) as any[];
+
+	return {
+		projectName: proj.name,
+		definition: proj.definition,
+		overview: proj.overview,
+		features: features.map(f => loadFeatureContext(f.id)),
 	};
-
-	// load all features
-	const featuresDir = join(projectDir, 'features');
-	if (isDir(featuresDir)) {
-		try {
-			for (const entry of readdirSync(featuresDir, { withFileTypes: true })) {
-				if (!entry.isDirectory() || entry.name === 'Archive' || entry.name.startsWith('.')) continue;
-				overview.features.push(loadFeatureContext(join(featuresDir, entry.name), entry.name));
-			}
-		} catch { /* skip */ }
-	}
-
-	// load DB record
-	try {
-		const db = getDb();
-		overview.dbRecord = db.prepare('SELECT * FROM projects WHERE name = ?').get(projectName);
-	} catch { /* no DB access */ }
-
-	return overview;
 }
 
-function resolveFeatureDir(featureName: string): string | null {
-	const settings = getSettings();
-	const base = settings.default_projects_path;
-	if (!base) return null;
-
-	// search across all projects
-	try {
-		for (const projEntry of readdirSync(base, { withFileTypes: true })) {
-			if (!projEntry.isDirectory()) continue;
-			const featureDir = join(base, projEntry.name, 'features', featureName);
-			if (isDir(featureDir)) return featureDir;
-		}
-	} catch { /* skip */ }
-
-	return null;
+function tryParseJson(s: string): any {
+	try { return JSON.parse(s); } catch { return s; }
 }
 
-// --- MAIN ---
 function main() {
 	const args = process.argv.slice(2).filter(a => a !== '--json');
 	const jsonOutput = process.argv.includes('--json');
-	const projectFlag = args.indexOf('--project');
+	const db = getDb();
+
+	const projectIdx = args.indexOf('--project');
+	const projectName = projectIdx >= 0 ? args[projectIdx + 1] : undefined;
+	const featureName = args.find(a => !a.startsWith('--') && a !== projectName);
 
 	let result: any;
 
-	if (projectFlag >= 0 && args[projectFlag + 1]) {
-		// load entire project
-		const projectName = args[projectFlag + 1];
-		const settings = getSettings();
-		const projectDir = settings.project_overrides[projectName]
-			?? join(settings.default_projects_path, projectName);
-
-		if (!isDir(projectDir)) {
-			result = { error: `Project directory not found: ${projectDir}` };
-		} else {
-			result = loadProjectOverview(projectDir, projectName);
-		}
-	} else if (args[0]) {
-		// direct feature dir or feature name
-		const input = args[0];
-		if (isDir(input) && existsSync(join(input, 'feature-definition.md'))) {
-			// direct path
-			const name = basename(input);
-			result = loadFeatureContext(input, name);
-		} else {
-			// treat as feature name, search
-			const dir = resolveFeatureDir(input);
-			if (dir) {
-				result = loadFeatureContext(dir, input);
-			} else {
-				result = { error: `Feature "${input}" not found in any project` };
-			}
-		}
+	if (featureName) {
+		// load single feature
+		const projName = projectName ?? detectProjectName();
+		const feat = db.prepare(`
+			SELECT f.id FROM features f JOIN projects p ON f.project_id = p.id
+			WHERE p.name = ? AND f.name = ? AND f.closed_at IS NULL
+		`).get(projName, featureName) as any;
+		if (!feat) { result = { error: `Feature "${featureName}" not found in "${projName}"` }; }
+		else { result = loadFeatureContext(feat.id); }
+	} else if (projectName) {
+		// load project overview
+		const proj = db.prepare('SELECT id FROM projects WHERE name = ?').get(projectName) as any;
+		if (!proj) { result = { error: `Project "${projectName}" not found` }; }
+		else { result = loadProjectOverview(proj.id); }
 	} else {
-		// load all projects
-		const settings = getSettings();
-		const base = settings.default_projects_path;
-		if (!base || !isDir(base)) {
-			result = { error: `Projects path not configured or doesn't exist: ${base}` };
-		} else {
-			const projects: ProjectOverview[] = [];
-			for (const entry of readdirSync(base, { withFileTypes: true })) {
-				if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
-				projects.push(loadProjectOverview(join(base, entry.name), entry.name));
-			}
-			result = { projects };
-		}
+		// all projects
+		const projects = db.prepare('SELECT id FROM projects ORDER BY name').all() as any[];
+		result = { projects: projects.map(p => loadProjectOverview(p.id)) };
 	}
 
 	if (jsonOutput) {
 		console.log(JSON.stringify(result, null, 2));
 	} else {
-		// human-readable summary
 		if (result.error) {
-			console.log(`❌ ${result.error}`);
+			console.log(`Error: ${result.error}`);
 			process.exit(1);
 		}
-
 		if (result.projects) {
-			// all projects
-			for (const p of result.projects) {
-				printProjectSummary(p);
-			}
+			for (const p of result.projects) printProjectSummary(p);
 		} else if (result.features) {
-			// single project
 			printProjectSummary(result);
 		} else if (result.featureName) {
-			// single feature
 			printFeatureSummary(result);
 		}
 	}
 }
 
 function printProjectSummary(p: ProjectOverview) {
-	console.log(`\n📁 ${p.projectName} (${p.features.length} features)`);
+	console.log(`\n${p.projectName} (${p.features.length} features)`);
 	for (const f of p.features) {
-		const status = f.dbRecord?.status ?? '?';
-		const reqCoverage = f.requirementsStatus?.coverage ?? '-';
-		const planProgress = f.plansStatus?.plans
-			?.map((pl: any) => `${pl.name}: ${pl.progress?.done ?? '?'}/${pl.progress?.total ?? '?'}`)
-			.join(', ') ?? '-';
-		console.log(`  ├─ ${f.featureName} [${status}] req:${reqCoverage}% plans:${planProgress}`);
+		console.log(`  - ${f.featureName} [${f.status}] docs:${f.documents.length} att:${f.attachments.length}`);
 	}
 }
 
 function printFeatureSummary(f: FeatureContext) {
-	console.log(`\n📋 Feature: ${f.featureName}`);
-	console.log(`  Status: ${f.dbRecord?.status ?? '?'}`);
+	console.log(`\nFeature: ${f.featureName} [${f.status}]`);
+	console.log(`  Project: ${f.projectName}`);
+	console.log(`  Branch: ${f.branch ?? '-'}`);
 	console.log(`  Definition: ${f.definition ? 'yes' : 'no'}`);
-	console.log(`  Requirements: ${f.requirements ? 'yes' : 'no'} (${f.requirementsStatus?.coverage ?? '-'}%)`);
-	console.log(`  Plans: ${f.plans.length}`);
-	if (f.plansStatus?.plans) {
-		for (const pl of f.plansStatus.plans) {
-			console.log(`    - ${pl.name} [${pl.status}] ${pl.progress.done}/${pl.progress.total}`);
-		}
-	}
 	console.log(`  Session log: ${f.sessionLog ? 'yes' : 'no'}`);
-	console.log(`  Discoveries: ${f.discoveries ? 'yes' : 'no'}`);
-	console.log(`  Context files: ${Object.keys(f.contextFiles).length}`);
+	console.log(`  Documents: ${f.documents.length}`);
+	for (const d of f.documents) {
+		console.log(`    - [${d.type}] ${d.name} (${d.size} bytes)`);
+	}
+	console.log(`  Attachments: ${f.attachments.length}`);
 }
 
 main();

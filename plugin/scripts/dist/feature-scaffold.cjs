@@ -1,25 +1,29 @@
-"use strict";var $=Object.create;var O=Object.defineProperty;var x=Object.getOwnPropertyDescriptor;var C=Object.getOwnPropertyNames;var G=Object.getPrototypeOf,P=Object.prototype.hasOwnProperty;var B=(e,o,r,t)=>{if(o&&typeof o=="object"||typeof o=="function")for(let n of C(o))!P.call(e,n)&&n!==r&&O(e,n,{get:()=>o[n],enumerable:!(t=x(o,n))||t.enumerable});return e};var M=(e,o,r)=>(r=e!=null?$(G(e)):{},B(o||!e||!e.__esModule?O(r,"default",{value:e,enumerable:!0}):r,e));var X=require("child_process"),s=require("fs"),c=require("path");var y=M(require("better-sqlite3"),1),u=require("fs"),T=require("path"),F=require("os");var j=`
+"use strict";var X=Object.create;var I=Object.defineProperty;var y=Object.getOwnPropertyDescriptor;var U=Object.getOwnPropertyNames;var h=Object.getPrototypeOf,D=Object.prototype.hasOwnProperty;var F=(e,a,t,r)=>{if(a&&typeof a=="object"||typeof a=="function")for(let n of U(a))!D.call(e,n)&&n!==t&&I(e,n,{get:()=>a[n],enumerable:!(r=y(a,n))||r.enumerable});return e};var j=(e,a,t)=>(t=e!=null?X(h(e)):{},F(a||!e||!e.__esModule?I(t,"default",{value:e,enumerable:!0}):t,e));var A=require("child_process"),_=require("path");var R=j(require("better-sqlite3"),1),d=require("fs"),l=require("path"),S=require("os");var g=`
 -- Registry dei progetti monitorati
 CREATE TABLE IF NOT EXISTS projects (
 	id INTEGER PRIMARY KEY AUTOINCREMENT,
 	name TEXT UNIQUE NOT NULL,
 	path TEXT NOT NULL,
 	type TEXT DEFAULT 'app',
+	definition TEXT,
+	overview TEXT,
 	created_at TEXT DEFAULT (datetime('now'))
 );
 
 -- Feature lifecycle
 CREATE TABLE IF NOT EXISTS features (
 	id INTEGER PRIMARY KEY AUTOINCREMENT,
-	project_id INTEGER NOT NULL REFERENCES projects(id),
+	project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
 	name TEXT NOT NULL,
 	branch TEXT,
 	status TEXT DEFAULT 'draft',
 	version INTEGER DEFAULT 1,
-	requirements_path TEXT,
-	plan_path TEXT,
-	progress_path TEXT,
-	changelog_path TEXT,
+	definition TEXT,
+	description TEXT,
+	session_log TEXT,
+	requirements_status TEXT,
+	plans_status TEXT,
+	pending_discoveries TEXT,
 	author TEXT,
 	last_modified_by TEXT,
 	created_at TEXT DEFAULT (datetime('now')),
@@ -27,15 +31,40 @@ CREATE TABLE IF NOT EXISTS features (
 	UNIQUE(project_id, name, version)
 );
 
--- Indice knowledge per ricerca cross-project
+-- Documents attached to features (requirements, plans, context notes, docs, closure)
+CREATE TABLE IF NOT EXISTS feature_documents (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	feature_id INTEGER NOT NULL REFERENCES features(id) ON DELETE CASCADE,
+	type TEXT NOT NULL,
+	name TEXT NOT NULL,
+	content TEXT NOT NULL DEFAULT '',
+	created_at TEXT DEFAULT (datetime('now')),
+	updated_at TEXT DEFAULT (datetime('now')),
+	UNIQUE(feature_id, type, name)
+);
+
+-- Binary attachments for features (PDF, images, etc.)
+CREATE TABLE IF NOT EXISTS feature_attachments (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	feature_id INTEGER NOT NULL REFERENCES features(id) ON DELETE CASCADE,
+	name TEXT NOT NULL,
+	mime_type TEXT,
+	size INTEGER,
+	data BLOB NOT NULL,
+	created_at TEXT DEFAULT (datetime('now')),
+	UNIQUE(feature_id, name)
+);
+
+-- Knowledge docs index per ricerca cross-project
 CREATE TABLE IF NOT EXISTS knowledge_docs (
 	id INTEGER PRIMARY KEY AUTOINCREMENT,
 	project TEXT,
 	category TEXT NOT NULL,
-	file_path TEXT UNIQUE NOT NULL,
+	file_path TEXT,
 	title TEXT,
 	content TEXT,
 	content_hash TEXT,
+	source TEXT DEFAULT 'manual',
 	updated_at TEXT DEFAULT (datetime('now'))
 );
 
@@ -64,19 +93,40 @@ CREATE TRIGGER IF NOT EXISTS knowledge_au AFTER UPDATE ON knowledge_docs BEGIN
 	VALUES (new.id, new.title, new.content, new.category, new.project);
 END;
 
+-- FTS5 per ricerca nei documenti feature
+CREATE VIRTUAL TABLE IF NOT EXISTS feature_docs_fts USING fts5(
+	name, content, type,
+	content='feature_documents',
+	content_rowid='id'
+);
+
+CREATE TRIGGER IF NOT EXISTS feature_docs_ai AFTER INSERT ON feature_documents BEGIN
+	INSERT INTO feature_docs_fts(rowid, name, content, type)
+	VALUES (new.id, new.name, new.content, new.type);
+END;
+
+CREATE TRIGGER IF NOT EXISTS feature_docs_ad AFTER DELETE ON feature_documents BEGIN
+	INSERT INTO feature_docs_fts(feature_docs_fts, rowid, name, content, type)
+	VALUES ('delete', old.id, old.name, old.content, old.type);
+END;
+
+CREATE TRIGGER IF NOT EXISTS feature_docs_au AFTER UPDATE ON feature_documents BEGIN
+	INSERT INTO feature_docs_fts(feature_docs_fts, rowid, name, content, type)
+	VALUES ('delete', old.id, old.name, old.content, old.type);
+	INSERT INTO feature_docs_fts(rowid, name, content, type)
+	VALUES (new.id, new.name, new.content, new.type);
+END;
+
 -- Indici
 CREATE INDEX IF NOT EXISTS idx_features_project ON features(project_id);
 CREATE INDEX IF NOT EXISTS idx_features_status ON features(status);
+CREATE INDEX IF NOT EXISTS idx_feature_docs_feature ON feature_documents(feature_id);
+CREATE INDEX IF NOT EXISTS idx_feature_docs_type ON feature_documents(type);
+CREATE INDEX IF NOT EXISTS idx_feature_attachments_feature ON feature_attachments(feature_id);
 CREATE INDEX IF NOT EXISTS idx_knowledge_project ON knowledge_docs(project);
 CREATE INDEX IF NOT EXISTS idx_knowledge_category ON knowledge_docs(category);
 CREATE INDEX IF NOT EXISTS idx_knowledge_hash ON knowledge_docs(content_hash);
-`;var f=(0,T.join)((0,F.homedir)(),".claude-project-flow"),V=(0,T.join)(f,"project-flow.db"),d=null;function k(){return d||((0,u.existsSync)(f)||(0,u.mkdirSync)(f,{recursive:!0}),d=new y.default(V),d.pragma("journal_mode = WAL"),d.pragma("foreign_keys = ON"),d.exec(j),z(d),d)}var h=(0,T.join)(f,"settings.json");function D(){if(!(0,u.existsSync)(h)){let e={knowledge_paths:[],default_projects_path:"",project_overrides:{}};return(0,u.writeFileSync)(h,JSON.stringify(e,null,"	")+`
-`),e}return JSON.parse((0,u.readFileSync)(h,"utf-8"))}function z(e){let o=e.prepare("PRAGMA table_info('features')").all(),r=new Set(o.map(t=>t.name));r.has("author")||e.exec("ALTER TABLE features ADD COLUMN author TEXT"),r.has("last_modified_by")||e.exec("ALTER TABLE features ADD COLUMN last_modified_by TEXT")}var N=require("child_process");function H(e){let o={encoding:"utf-8",stdio:"pipe",cwd:e},r=null,t=null;try{r=(0,N.execSync)("git config user.name",o).trim()||null}catch{}try{t=(0,N.execSync)("git config user.email",o).trim()||null}catch{}return{name:r,email:t}}function E(e){return H(e).name}var p=`
----
-`,U="**Ultima modifica:**";function Y(){return new Date().toISOString().slice(0,10)}function S(e,o,r){let t=E(r);if(!t)return e;let n=`${U} ${t} | ${Y()} | ${o}`,i=e.lastIndexOf(p);return i>=0&&e.substring(i+p.length).trimStart().startsWith(U)?e.substring(0,i)+p+n+`
-`:e.trimEnd()+`
-`+p+n+`
-`}function L(e){return(0,X.execSync)(`git ${e}`,{encoding:"utf-8",stdio:"pipe"}).trim()}function I(e,o){let r=D(),t=r.project_overrides[e]??(0,c.join)(r.default_projects_path,e);return(0,c.join)(t,"features",o)}function v(){try{let e=L("rev-parse --show-toplevel");return(0,c.basename)(e)}catch{return(0,c.basename)(process.cwd())}}function q(e){let o=(0,c.join)(e,"Archive");if(!(0,s.existsSync)(o))return 1;try{return((0,s.readdirSync)(o).filter(t=>/^v\d+$/.test(t)).map(t=>parseInt(t.substring(1))).sort((t,n)=>n-t)[0]??0)+1}catch{return 1}}function _(e){if(!(0,s.existsSync)(e))return null;let o=q(e),r=(0,c.join)(e,"Archive",`v${o}`);(0,s.mkdirSync)(r,{recursive:!0});for(let t of(0,s.readdirSync)(e))t!=="Archive"&&(0,s.renameSync)((0,c.join)(e,t),(0,c.join)(r,t));return{version:o,path:r}}function J(e){let o=e.projectName??v(),r=I(o,e.featureName),t;if((0,s.existsSync)(r)&&(0,s.existsSync)((0,c.join)(r,"feature-definition.md"))){let a=_(r);a&&(t=`Archive/v${a.version}`)}if((0,s.mkdirSync)((0,c.join)(r,"context"),{recursive:!0}),(0,s.mkdirSync)((0,c.join)(r,"plans"),{recursive:!0}),(0,s.mkdirSync)((0,c.join)(r,"requirements"),{recursive:!0}),e.createBranch)try{L(`checkout -b ${e.branch}`)}catch{}let n=new Date().toISOString().slice(0,10),i=`# Feature: ${e.featureName}
+`;var u=(0,l.join)((0,S.homedir)(),".claude-project-flow"),C=(0,l.join)(u,"project-flow.db"),c=null;function N(){return c||((0,d.existsSync)(u)||(0,d.mkdirSync)(u,{recursive:!0}),c=new R.default(C),c.pragma("journal_mode = WAL"),c.pragma("foreign_keys = ON"),c.exec(g),b(c),c)}var P=(0,l.join)(u,"settings.json");function i(e,a,t,r){e.prepare(`PRAGMA table_info('${a}')`).all().some(o=>o.name===t)||e.exec(`ALTER TABLE ${a} ADD COLUMN ${t} ${r}`)}function b(e){i(e,"features","author","TEXT"),i(e,"features","last_modified_by","TEXT"),i(e,"features","definition","TEXT"),i(e,"features","description","TEXT"),i(e,"features","session_log","TEXT"),i(e,"features","requirements_status","TEXT"),i(e,"features","plans_status","TEXT"),i(e,"features","pending_discoveries","TEXT"),i(e,"projects","definition","TEXT"),i(e,"projects","overview","TEXT"),i(e,"knowledge_docs","source","TEXT DEFAULT 'manual'")}var m=require("child_process");function k(e){let a={encoding:"utf-8",stdio:"pipe",cwd:e},t=null,r=null;try{t=(0,m.execSync)("git config user.name",a).trim()||null}catch{}try{r=(0,m.execSync)("git config user.email",a).trim()||null}catch{}return{name:t,email:r}}function p(e){return k(e).name}function O(e){return(0,A.execSync)(`git ${e}`,{encoding:"utf-8",stdio:"pipe"}).trim()}function w(){try{let e=O("rev-parse --show-toplevel");return(0,_.basename)(e)}catch{return(0,_.basename)(process.cwd())}}function G(e){let a=e.projectName??w(),t=N(),r=p(),n=t.prepare("SELECT id FROM projects WHERE name = ?").get(a);if(!n){let f=process.cwd();t.prepare("INSERT INTO projects (name, path, type) VALUES (?, ?, ?)").run(a,f,"app"),n=t.prepare("SELECT id FROM projects WHERE name = ?").get(a)}let o=t.prepare("SELECT id, status FROM features WHERE project_id = ? AND name = ? AND closed_at IS NULL").get(n.id,e.featureName);if(o&&t.prepare("UPDATE features SET closed_at = datetime('now'), status = 'superseded' WHERE id = ?").run(o.id),e.createBranch)try{O(`checkout -b ${e.branch}`)}catch{}let E=new Date().toISOString().slice(0,10),T=`# Feature: ${e.featureName}
 
 ## Description
 ${e.description}
@@ -85,27 +135,21 @@ ${e.description}
 \`${e.branch}\`
 
 ## Created
-${n}
+${E}
 
 ## Status
 draft
-`;return i=S(i,"Feature inizializzata"),(0,s.writeFileSync)((0,c.join)(r,"feature-definition.md"),i),{command:"init",success:!0,featureName:e.featureName,branch:e.branch,featureDir:r,archived:t}}function W(e,o){let r=o??v(),t=I(r,e);if(!(0,s.existsSync)(t))return{command:"archive",success:!1,featureDir:t,archiveVersion:0,archivePath:"",error:"Feature directory not found"};let n=_(t);return n?{command:"archive",success:!0,featureDir:t,archiveVersion:n.version,archivePath:n.path}:{command:"archive",success:!1,featureDir:t,archiveVersion:0,archivePath:"",error:"Nothing to archive"}}function K(e,o,r,t){let n=t??v(),i=I(n,e);if(!(0,s.existsSync)(i))return{command:"close",success:!1,featureName:e,featureDir:i,reason:o,closureFile:"",error:"Feature directory not found"};let a,g=_(i);g&&(a=`Archive/v${g.version}`),(0,s.mkdirSync)((0,c.join)(i,"context"),{recursive:!0});let l=new Date().toISOString().slice(0,10),A=E()??"unknown",m=`# Closure: ${e}
+`,s=t.prepare("INSERT INTO features (project_id, name, branch, status, description, definition, author, last_modified_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)").run(n.id,e.featureName,e.branch,"draft",e.description,T,r,r);return{command:"init",success:!0,featureName:e.featureName,branch:e.branch,featureId:s.lastInsertRowid}}function x(e,a,t,r){let n=r??w(),o=N(),E=p()??"unknown",T=o.prepare("SELECT id FROM projects WHERE name = ?").get(n);if(!T)return{command:"close",success:!1,featureName:e,reason:a,error:"Project not found"};let s=o.prepare("SELECT id FROM features WHERE project_id = ? AND name = ? AND closed_at IS NULL").get(T.id,e);if(!s)return{command:"close",success:!1,featureName:e,reason:a,error:"Feature not found or already closed"};let f=new Date().toISOString().slice(0,10),L=`# Closure: ${e}
 
 ## Status
-${r}
+${t}
 
 ## Reason
-${o}
+${a}
 
 ## Closed by
-${A}
+${E}
 
 ## Date
-${l}
-
-## Archived
-${a??"N/A"}
-`;m=S(m,`Feature chiusa: ${r}`);let R=(0,c.join)(i,"CLOSURE.md");(0,s.writeFileSync)(R,m);try{let w=k(),b=w.prepare("SELECT id FROM projects WHERE name = ?").get(n);b&&w.prepare("UPDATE features SET status = ?, closed_at = datetime('now'), last_modified_by = ? WHERE project_id = ? AND name = ? AND closed_at IS NULL").run(r,A,b.id,e)}catch{}return{command:"close",success:!0,featureName:e,featureDir:i,reason:o,closureFile:R,archived:a}}function Q(){let e=process.argv[2],o=process.argv.includes("--json"),r=process.argv.slice(3).filter(n=>n!=="--json"),t;switch(e){case"init":{let n={featureName:"",branch:"",description:""};for(let i=0;i<r.length;i++)switch(r[i]){case"--name":n.featureName=r[++i];break;case"--branch":n.branch=r[++i];break;case"--desc":n.description=r.slice(++i).join(" "),i=r.length;break;case"--project":n.projectName=r[++i];break;case"--create-branch":n.createBranch=!0;break}if(!n.featureName||!n.branch){t={error:"Required: --name <name> --branch <branch> --desc <description>"};break}n.description||(n.description=n.featureName),t=J(n);break}case"archive":{let n=r[0],i=r.includes("--project")?r[r.indexOf("--project")+1]:void 0;if(!n){t={error:"Required: feature name"};break}t=W(n,i);break}case"close":{let n=r[0],i="Cancelled",a="cancelled",g;for(let l=1;l<r.length;l++)switch(r[l]){case"--reason":i=r.slice(++l).join(" "),l=r.length;break;case"--status":a=r[++l];break;case"--project":g=r[++l];break}if(!n){t={error:"Required: feature name"};break}t=K(n,i,a,g);break}default:t={error:`Unknown command: ${e}. Use: init, archive, close`}}if(o)console.log(JSON.stringify(t,null,2));else switch(t.error&&(console.log(`\u274C ${t.error}`),process.exit(1)),t.command){case"init":console.log(`
-\u2705 Feature "${t.featureName}" inizializzata`),console.log(`  Branch: ${t.branch}`),console.log(`  Dir: ${t.featureDir}`),t.archived&&console.log(`  Archiviato: ${t.archived}`);break;case"archive":console.log(`
-\u{1F4E6} Archiviato in v${t.archiveVersion}`),console.log(`  Path: ${t.archivePath}`);break;case"close":console.log(`
-\u{1F512} Feature "${t.featureName}" chiusa`),console.log(`  Reason: ${t.reason}`),console.log(`  Closure: ${t.closureFile}`),t.archived&&console.log(`  Archiviato: ${t.archived}`);break}}Q();
+${f}
+`;return o.prepare("INSERT INTO feature_documents (feature_id, type, name, content) VALUES (?, ?, ?, ?)").run(s.id,"closure","CLOSURE",L),o.prepare("UPDATE features SET status = ?, closed_at = datetime('now'), last_modified_by = ? WHERE id = ?").run(t,E,s.id),{command:"close",success:!0,featureName:e,reason:a}}function B(){let e=process.argv[2],a=process.argv.includes("--json"),t=process.argv.slice(3).filter(n=>n!=="--json"),r;switch(e){case"init":{let n={featureName:"",branch:"",description:""};for(let o=0;o<t.length;o++)switch(t[o]){case"--name":n.featureName=t[++o];break;case"--branch":n.branch=t[++o];break;case"--desc":n.description=t.slice(++o).join(" "),o=t.length;break;case"--project":n.projectName=t[++o];break;case"--create-branch":n.createBranch=!0;break}if(!n.featureName||!n.branch){r={error:"Required: --name <name> --branch <branch> --desc <description>"};break}n.description||(n.description=n.featureName),r=G(n);break}case"close":{let n=t[0],o="Cancelled",E="cancelled",T;for(let s=1;s<t.length;s++)switch(t[s]){case"--reason":o=t.slice(++s).join(" "),s=t.length;break;case"--status":E=t[++s];break;case"--project":T=t[++s];break}if(!n){r={error:"Required: feature name"};break}r=x(n,o,E,T);break}default:r={error:`Unknown command: ${e}. Use: init, close`}}if(a)console.log(JSON.stringify(r,null,2));else switch(r.error&&(console.log(`Error: ${r.error}`),process.exit(1)),r.command){case"init":console.log(`Feature "${r.featureName}" inizializzata (id: ${r.featureId})`),console.log(`  Branch: ${r.branch}`);break;case"close":console.log(`Feature "${r.featureName}" chiusa`),console.log(`  Reason: ${r.reason}`);break}}B();

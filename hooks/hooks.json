@@ -14,6 +14,11 @@
 						"type": "command",
 						"command": "_R=\"${CLAUDE_PLUGIN_ROOT}\"; [ -z \"$_R\" ] && _R=\"$HOME/.claude/plugins/marketplaces/matteovisca/plugin\"; node \"$_R/scripts/dist/service.cjs\" hook session-start",
 						"timeout": 30
+					},
+					{
+						"type": "command",
+						"command": "_R=\"${CLAUDE_PLUGIN_ROOT}\"; [ -z \"$_R\" ] && _R=\"$HOME/.claude/plugins/marketplaces/matteovisca/plugin\"; _PID=\"$HOME/.claude/react-dashboard.pid\"; if [ -f \"$_PID\" ] && kill -0 $(cat \"$_PID\") 2>/dev/null; then true; else mkdir -p \"$HOME/.claude/logs\" && nohup node \"$_R/scripts/dist/dashboard-server.cjs\" >> \"$HOME/.claude/logs/react-dashboard.log\" 2>&1 & fi",
+						"timeout": 5
 					}
 				]
 			}
@@ -25,6 +30,11 @@
 						"type": "command",
 						"command": "_R=\"${CLAUDE_PLUGIN_ROOT}\"; [ -z \"$_R\" ] && _R=\"$HOME/.claude/plugins/marketplaces/matteovisca/plugin\"; node \"$_R/scripts/dist/service.cjs\" hook session-stop",
 						"timeout": 15
+					},
+					{
+						"type": "command",
+						"command": "_PID=\"$HOME/.claude/react-dashboard.pid\"; if [ -f \"$_PID\" ]; then _C=$(pgrep -f 'claude' 2>/dev/null | wc -l); if [ \"$_C\" -le 2 ]; then kill $(cat \"$_PID\") 2>/dev/null; rm -f \"$_PID\"; fi; fi",
+						"timeout": 5
 					}
 				]
 			}

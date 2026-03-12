@@ -1,61 +1,62 @@
 ---
-description: Configure project-flow paths for knowledge base, projects, and per-project overrides
+description: Configure project-flow plugin memory path
 ---
 
 # Setup claude-project-flow
 
-Configure the working directories for the plugin.
+Configure the working directory for the plugin.
 
-## Current settings
+## Step 1: Read current settings
 
-First, read the current settings by calling the MCP tool `project_flow__settings_get`.
-
-## Configuration flow
-
-Show the user the current settings in a clear table, then ask what they want to configure:
-
-1. **Knowledge paths** — Directories containing shared MD files (patterns, conventions, libraries). These are indexed cross-project with FTS5. Multiple paths allowed (e.g., git repo, samba share, local copy).
-
-2. **Default projects path** — Base directory where feature docs are stored for all projects. Each project gets a subdirectory automatically.
-
-3. **Per-project override** — Override the docs path for a specific project. Useful when you want a project's docs stored locally in the repo instead of the shared path.
-
-## Validation and scaffolding
-
-- Expand `~` to the home directory
-- Use absolute paths
-- If a directory doesn't exist, ask if it should be created
-- **When creating a knowledge path**, scaffold the standard structure:
-  ```
-  <knowledge_path>/
-  ├── patterns/        — Reusable design patterns and architectural decisions
-  ├── conventions/     — Coding conventions, naming rules, style guides
-  └── libraries/       — Library-specific documentation and usage notes
-  ```
-- **When creating a default projects path**, scaffold:
-  ```
-  <projects_path>/
-  └── (empty — project subdirectories are created by /feature-init)
-  ```
-- **When creating a per-project override**, scaffold the same `projects/` structure. The user might store multiple projects there.
-
-For each created directory, generate a `README.md` explaining its purpose.
-
-## Saving
-
-After the user confirms, call the MCP tool `project_flow__settings_update` with the updated settings.
-
-## Example interaction
-
+```bash
+node "$PLUGIN_DIR/scripts/dist/setup.cjs" get --json
 ```
-Current settings:
-  Knowledge paths: (none)
-  Default projects path: (none)
-  Project overrides: (none)
 
-What would you like to configure?
-1. Add a knowledge path
-2. Set default projects path
-3. Add a project override
-4. Done
+Show the user the current settings:
+
+| Setting | Value |
+|---------|-------|
+| Memory path | (path or "not set") |
+
+## Step 2: Ask what to configure
+
+Ask the user for the memory path — the base directory where the plugin stores all data. Inside this path, two subdirectories are created:
+- `projects/` — Feature documentation organized by project
+- `knowledge/` — Shared cross-project knowledge base (patterns, conventions, libraries)
+
+## Step 3: Apply changes via script
+
+Use the script in JSON mode to apply changes. The script handles path validation, directory creation, and scaffolding automatically.
+
+```bash
+node "$PLUGIN_DIR/scripts/dist/setup.cjs" set --json \
+  memory_path=/path/to/memory
 ```
+
+**Important:** Always expand `~` to the full home directory path before passing to the script. Use absolute paths only.
+
+If the directory doesn't exist, the script creates it with the full structure:
+- `projects/`
+- `knowledge/patterns/`
+- `knowledge/conventions/`
+- `knowledge/libraries/`
+- `README.md`
+
+## Step 4: Verify
+
+Run `get --json` again to confirm the changes were applied correctly and show the updated settings.
+
+## Step 5: Next steps
+
+Suggest the user proceed with:
+- `/claude-project-flow:project-init` to register the current project
+
+## Interactive mode (for terminal use)
+
+The script also supports a standalone interactive mode when run directly from a terminal (not via Claude):
+
+```bash
+node "$PLUGIN_DIR/scripts/dist/setup.cjs"
+```
+
+This provides a simple prompt for setting the memory path — useful for manual configuration without spending Claude tokens.

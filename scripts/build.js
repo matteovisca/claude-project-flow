@@ -31,35 +31,6 @@ await build({
 
 console.log('  [ok] service.cjs built');
 
-// Build sync CLI
-await build({
-	entryPoints: [resolve(root, 'src/sync/sync-cli.ts')],
-	bundle: true,
-	platform: 'node',
-	target: 'node18',
-	format: 'cjs',
-	outfile: resolve(root, 'plugin/scripts/dist/sync.cjs'),
-	minify: true,
-	logLevel: 'error',
-	external: ['better-sqlite3'],
-});
-
-console.log('  [ok] sync.cjs built');
-
-// Build sign CLI
-await build({
-	entryPoints: [resolve(root, 'src/utils/sign-cli.ts')],
-	bundle: true,
-	platform: 'node',
-	target: 'node18',
-	format: 'cjs',
-	outfile: resolve(root, 'plugin/scripts/dist/sign.cjs'),
-	minify: true,
-	logLevel: 'error',
-});
-
-console.log('  [ok] sign.cjs built');
-
 // Build context-loader CLI
 await build({
 	entryPoints: [resolve(root, 'src/scripts/context-loader.ts')],
@@ -132,6 +103,46 @@ await build({
 
 console.log('  [ok] setup-permissions.cjs built');
 
+// Build project-git CLI
+await build({
+	entryPoints: [resolve(root, 'src/scripts/project-git.ts')],
+	bundle: true,
+	platform: 'node',
+	target: 'node18',
+	format: 'cjs',
+	outfile: resolve(root, 'plugin/scripts/dist/project-git.cjs'),
+	minify: true,
+	logLevel: 'error',
+	external: ['better-sqlite3'],
+});
+
+console.log('  [ok] project-git.cjs built');
+
+// Build dashboard server
+await build({
+	entryPoints: [resolve(root, 'src/dashboard/server/start.ts')],
+	bundle: true,
+	platform: 'node',
+	target: 'node18',
+	format: 'cjs',
+	outfile: resolve(root, 'plugin/scripts/dist/dashboard-server.cjs'),
+	minify: true,
+	logLevel: 'error',
+	external: ['better-sqlite3'],
+	define: {
+		'__VERSION__': JSON.stringify(pkg.version)
+	},
+	banner: {
+		js: '#!/usr/bin/env node'
+	}
+});
+
+console.log('  [ok] dashboard-server.cjs built');
+
+// Build dashboard client (React → self-contained HTML)
+const { execSync } = await import('child_process');
+execSync('node scripts/build-client.js', { cwd: root, stdio: 'inherit' });
+
 // Sync version in all manifests
 const version = pkg.version;
 
@@ -160,7 +171,7 @@ const pluginPkg = {
 	description: 'Runtime dependencies for claude-project-flow plugin',
 	type: 'module',
 	dependencies: {
-		'better-sqlite3': pkg.dependencies['better-sqlite3']
+		'better-sqlite3': pkg.dependencies['better-sqlite3'],
 	},
 	engines: {
 		node: '>=18.0.0'
@@ -183,13 +194,14 @@ const requiredFiles = [
 	'plugin/package.json',
 	'plugin/hooks/hooks.json',
 	'plugin/scripts/dist/service.cjs',
-	'plugin/scripts/dist/sync.cjs',
-	'plugin/scripts/dist/sign.cjs',
 	'plugin/scripts/dist/context-loader.cjs',
 	'plugin/scripts/dist/git-ops.cjs',
 	'plugin/scripts/dist/feature-scaffold.cjs',
 	'plugin/scripts/dist/man.cjs',
 	'plugin/scripts/dist/setup-permissions.cjs',
+	'plugin/scripts/dist/project-git.cjs',
+	'plugin/scripts/dist/dashboard-server.cjs',
+	'plugin/scripts/dist/dashboard-ui.html',
 	'plugin/scripts/smart-install.js',
 ];
 for (const filePath of requiredFiles) {
@@ -216,7 +228,13 @@ if (existsSync(cacheBase)) {
 			if (!ver.isDirectory()) continue;
 			const target = join(pluginDir, ver.name);
 			cpSync(resolve(root, 'plugin'), target, { recursive: true });
-			console.log(`  [ok] deployed to cache: ${marketplace.name}/${pluginName}/${ver.name}`);
+			// install native dependencies (better-sqlite3)
+			try {
+				execSync('npm install --production --no-audit --no-fund', { cwd: target, stdio: 'pipe' });
+				console.log(`  [ok] deployed + npm install: ${marketplace.name}/${pluginName}/${ver.name}`);
+			} catch (e) {
+				console.warn(`  [!!] deployed but npm install failed: ${marketplace.name}/${pluginName}/${ver.name}: ${e.message}`);
+			}
 			deployed = true;
 		}
 	}

@@ -1,13 +1,11 @@
-// mechanical scaffolding operations for features
+// mechanical scaffolding operations for features (DB-only)
 // usage: node feature-scaffold.cjs <command> [options]
-// commands: init, archive, close
+// commands: init, close
 
 import { execSync } from 'child_process';
-import { existsSync, mkdirSync, readdirSync, renameSync, writeFileSync, readFileSync } from 'fs';
-import { join, basename } from 'path';
-import { getSettings, getDb } from '../db/database.js';
+import { basename } from 'path';
+import { getDb } from '../db/database.js';
 import { getGitUserName } from '../utils/git-user.js';
-import { updateFooter } from '../utils/doc-signature.js';
 
 interface InitOptions {
 	featureName: string;
@@ -22,17 +20,7 @@ interface InitResult {
 	success: boolean;
 	featureName: string;
 	branch: string;
-	featureDir: string;
-	archived?: string;
-	error?: string;
-}
-
-interface ArchiveResult {
-	command: 'archive';
-	success: boolean;
-	featureDir: string;
-	archiveVersion: number;
-	archivePath: string;
+	featureId: number;
 	error?: string;
 }
 
@@ -40,22 +28,12 @@ interface CloseResult {
 	command: 'close';
 	success: boolean;
 	featureName: string;
-	featureDir: string;
 	reason: string;
-	closureFile: string;
-	archived?: string;
 	error?: string;
 }
 
 function git(cmd: string): string {
 	return execSync(`git ${cmd}`, { encoding: 'utf-8', stdio: 'pipe' }).trim();
-}
-
-function resolveFeatureDir(projectName: string, featureName: string): string {
-	const settings = getSettings();
-	const projectPath = settings.project_overrides[projectName]
-		?? join(settings.default_projects_path, projectName);
-	return join(projectPath, 'features', featureName);
 }
 
 function detectProjectName(): string {
@@ -67,172 +45,87 @@ function detectProjectName(): string {
 	}
 }
 
-function getNextArchiveVersion(featureDir: string): number {
-	const archiveDir = join(featureDir, 'Archive');
-	if (!existsSync(archiveDir)) return 1;
-	try {
-		const versions = readdirSync(archiveDir)
-			.filter(d => /^v\d+$/.test(d))
-			.map(d => parseInt(d.substring(1)))
-			.sort((a, b) => b - a);
-		return (versions[0] ?? 0) + 1;
-	} catch { return 1; }
-}
-
-function archiveFeature(featureDir: string): { version: number; path: string } | null {
-	if (!existsSync(featureDir)) return null;
-
-	const version = getNextArchiveVersion(featureDir);
-	const archivePath = join(featureDir, 'Archive', `v${version}`);
-	mkdirSync(archivePath, { recursive: true });
-
-	// move all root-level content except Archive/
-	for (const entry of readdirSync(featureDir)) {
-		if (entry === 'Archive') continue;
-		renameSync(join(featureDir, entry), join(archivePath, entry));
-	}
-
-	return { version, path: archivePath };
-}
-
 // --- INIT ---
 function doInit(options: InitOptions): InitResult {
 	const projectName = options.projectName ?? detectProjectName();
-	const featureDir = resolveFeatureDir(projectName, options.featureName);
+	const db = getDb();
+	const gitUser = getGitUserName();
 
-	// handle versioning if dir exists
-	let archived: string | undefined;
-	if (existsSync(featureDir) && existsSync(join(featureDir, 'feature-definition.md'))) {
-		const result = archiveFeature(featureDir);
-		if (result) archived = `Archive/v${result.version}`;
+	// ensure project exists
+	let projRow = db.prepare('SELECT id FROM projects WHERE name = ?').get(projectName) as any;
+	if (!projRow) {
+		const cwd = process.cwd();
+		db.prepare('INSERT INTO projects (name, path, type) VALUES (?, ?, ?)').run(projectName, cwd, 'app');
+		projRow = db.prepare('SELECT id FROM projects WHERE name = ?').get(projectName) as any;
 	}
 
-	// create directory structure
-	mkdirSync(join(featureDir, 'context'), { recursive: true });
-	mkdirSync(join(featureDir, 'plans'), { recursive: true });
-	mkdirSync(join(featureDir, 'requirements'), { recursive: true });
+	// check for existing active feature
+	const existing = db.prepare(
+		'SELECT id, status FROM features WHERE project_id = ? AND name = ? AND closed_at IS NULL'
+	).get(projRow.id, options.featureName) as any;
+
+	if (existing) {
+		// bump version — close old, create new
+		db.prepare("UPDATE features SET closed_at = datetime('now'), status = 'superseded' WHERE id = ?").run(existing.id);
+	}
 
 	// create branch if requested
 	if (options.createBranch) {
-		try {
-			git(`checkout -b ${options.branch}`);
-		} catch { /* branch may already exist */ }
+		try { git(`checkout -b ${options.branch}`); } catch { /* branch may already exist */ }
 	}
 
-	// write feature-definition.md
+	// create feature in DB
 	const today = new Date().toISOString().slice(0, 10);
-	let definition = `# Feature: ${options.featureName}
+	const definition = `# Feature: ${options.featureName}\n\n## Description\n${options.description}\n\n## Branch\n\`${options.branch}\`\n\n## Created\n${today}\n\n## Status\ndraft\n`;
 
-## Description
-${options.description}
-
-## Branch
-\`${options.branch}\`
-
-## Created
-${today}
-
-## Status
-draft
-`;
-
-	definition = updateFooter(definition, 'Feature inizializzata');
-	writeFileSync(join(featureDir, 'feature-definition.md'), definition);
+	const result = db.prepare(
+		'INSERT INTO features (project_id, name, branch, status, description, definition, author, last_modified_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+	).run(projRow.id, options.featureName, options.branch, 'draft', options.description, definition, gitUser, gitUser);
 
 	return {
 		command: 'init',
 		success: true,
 		featureName: options.featureName,
 		branch: options.branch,
-		featureDir,
-		archived,
-	};
-}
-
-// --- ARCHIVE ---
-function doArchive(featureName: string, projectName?: string): ArchiveResult {
-	const project = projectName ?? detectProjectName();
-	const featureDir = resolveFeatureDir(project, featureName);
-
-	if (!existsSync(featureDir)) {
-		return { command: 'archive', success: false, featureDir, archiveVersion: 0, archivePath: '', error: 'Feature directory not found' };
-	}
-
-	const result = archiveFeature(featureDir);
-	if (!result) {
-		return { command: 'archive', success: false, featureDir, archiveVersion: 0, archivePath: '', error: 'Nothing to archive' };
-	}
-
-	return {
-		command: 'archive',
-		success: true,
-		featureDir,
-		archiveVersion: result.version,
-		archivePath: result.path,
+		featureId: result.lastInsertRowid as number,
 	};
 }
 
 // --- CLOSE ---
 function doClose(featureName: string, reason: string, status: string, projectName?: string): CloseResult {
 	const project = projectName ?? detectProjectName();
-	const featureDir = resolveFeatureDir(project, featureName);
+	const db = getDb();
+	const user = getGitUserName() ?? 'unknown';
 
-	if (!existsSync(featureDir)) {
-		return { command: 'close', success: false, featureName, featureDir, reason, closureFile: '', error: 'Feature directory not found' };
+	const projRow = db.prepare('SELECT id FROM projects WHERE name = ?').get(project) as any;
+	if (!projRow) {
+		return { command: 'close', success: false, featureName, reason, error: 'Project not found' };
 	}
 
-	// archive current state
-	let archived: string | undefined;
-	const archiveResult = archiveFeature(featureDir);
-	if (archiveResult) archived = `Archive/v${archiveResult.version}`;
+	const feature = db.prepare(
+		'SELECT id FROM features WHERE project_id = ? AND name = ? AND closed_at IS NULL'
+	).get(projRow.id, featureName) as any;
 
-	// recreate minimal structure
-	mkdirSync(join(featureDir, 'context'), { recursive: true });
+	if (!feature) {
+		return { command: 'close', success: false, featureName, reason, error: 'Feature not found or already closed' };
+	}
 
-	// create CLOSURE.md
+	// create closure document
 	const today = new Date().toISOString().slice(0, 10);
-	const user = getGitUserName() ?? 'unknown';
-	let closure = `# Closure: ${featureName}
+	const closureContent = `# Closure: ${featureName}\n\n## Status\n${status}\n\n## Reason\n${reason}\n\n## Closed by\n${user}\n\n## Date\n${today}\n`;
 
-## Status
-${status}
+	db.prepare('INSERT INTO feature_documents (feature_id, type, name, content) VALUES (?, ?, ?, ?)')
+		.run(feature.id, 'closure', 'CLOSURE', closureContent);
 
-## Reason
-${reason}
-
-## Closed by
-${user}
-
-## Date
-${today}
-
-## Archived
-${archived ?? 'N/A'}
-`;
-
-	closure = updateFooter(closure, `Feature chiusa: ${status}`);
-	const closureFile = join(featureDir, 'CLOSURE.md');
-	writeFileSync(closureFile, closure);
-
-	// update DB
-	try {
-		const db = getDb();
-		const projRow = db.prepare('SELECT id FROM projects WHERE name = ?').get(project) as any;
-		if (projRow) {
-			db.prepare(
-				"UPDATE features SET status = ?, closed_at = datetime('now'), last_modified_by = ? WHERE project_id = ? AND name = ? AND closed_at IS NULL"
-			).run(status, user, projRow.id, featureName);
-		}
-	} catch { /* DB update failed, not critical */ }
+	// update feature status
+	db.prepare("UPDATE features SET status = ?, closed_at = datetime('now'), last_modified_by = ? WHERE id = ?")
+		.run(status, user, feature.id);
 
 	return {
 		command: 'close',
 		success: true,
 		featureName,
-		featureDir,
 		reason,
-		closureFile,
-		archived,
 	};
 }
 
@@ -246,7 +139,6 @@ function main() {
 
 	switch (command) {
 		case 'init': {
-			// parse args: --name <name> --branch <branch> --desc <desc> [--project <proj>] [--create-branch]
 			const opts: InitOptions = { featureName: '', branch: '', description: '' };
 			for (let i = 0; i < args.length; i++) {
 				switch (args[i]) {
@@ -266,16 +158,7 @@ function main() {
 			break;
 		}
 
-		case 'archive': {
-			const featureName = args[0];
-			const projectName = args.includes('--project') ? args[args.indexOf('--project') + 1] : undefined;
-			if (!featureName) { result = { error: 'Required: feature name' }; break; }
-			result = doArchive(featureName, projectName);
-			break;
-		}
-
 		case 'close': {
-			// parse: <feature-name> --reason <reason> --status <cancelled|deferred>
 			const featureName = args[0];
 			let reason = 'Cancelled';
 			let status = 'cancelled';
@@ -293,32 +176,24 @@ function main() {
 		}
 
 		default:
-			result = { error: `Unknown command: ${command}. Use: init, archive, close` };
+			result = { error: `Unknown command: ${command}. Use: init, close` };
 	}
 
 	if (jsonOutput) {
 		console.log(JSON.stringify(result, null, 2));
 	} else {
 		if (result.error) {
-			console.log(`❌ ${result.error}`);
+			console.log(`Error: ${result.error}`);
 			process.exit(1);
 		}
 		switch (result.command) {
 			case 'init':
-				console.log(`\n✅ Feature "${result.featureName}" inizializzata`);
+				console.log(`Feature "${result.featureName}" inizializzata (id: ${result.featureId})`);
 				console.log(`  Branch: ${result.branch}`);
-				console.log(`  Dir: ${result.featureDir}`);
-				if (result.archived) console.log(`  Archiviato: ${result.archived}`);
-				break;
-			case 'archive':
-				console.log(`\n📦 Archiviato in v${result.archiveVersion}`);
-				console.log(`  Path: ${result.archivePath}`);
 				break;
 			case 'close':
-				console.log(`\n🔒 Feature "${result.featureName}" chiusa`);
+				console.log(`Feature "${result.featureName}" chiusa`);
 				console.log(`  Reason: ${result.reason}`);
-				console.log(`  Closure: ${result.closureFile}`);
-				if (result.archived) console.log(`  Archiviato: ${result.archived}`);
 				break;
 		}
 	}

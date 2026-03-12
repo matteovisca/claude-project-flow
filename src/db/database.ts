@@ -29,38 +29,56 @@ export const SETTINGS_PATH = join(DATA_DIR, 'settings.json');
 
 export function getSettings(): Settings {
 	if (!existsSync(SETTINGS_PATH)) {
-		const defaults: Settings = {
-			knowledge_paths: [],
-			default_projects_path: '',
-			project_overrides: {},
-		};
+		const defaults: Settings = { memory_path: '' };
 		writeFileSync(SETTINGS_PATH, JSON.stringify(defaults, null, '\t') + '\n');
 		return defaults;
 	}
-	return JSON.parse(readFileSync(SETTINGS_PATH, 'utf-8'));
+	const raw = JSON.parse(readFileSync(SETTINGS_PATH, 'utf-8'));
+	// migrate old settings formats
+	if ('projects_path' in raw && !('memory_path' in raw)) {
+		raw.memory_path = raw.projects_path;
+	} else if ('default_projects_path' in raw && !('memory_path' in raw)) {
+		raw.memory_path = raw.default_projects_path;
+	}
+	return { memory_path: raw.memory_path || '' };
 }
 
 export function saveSettings(settings: Settings): void {
 	writeFileSync(SETTINGS_PATH, JSON.stringify(settings, null, '\t') + '\n');
 }
 
-function runMigrations(db: Database.Database): void {
-	// check if columns exist before adding (idempotent)
-	const cols = db.prepare("PRAGMA table_info('features')").all() as { name: string }[];
-	const colNames = new Set(cols.map(c => c.name));
-	if (!colNames.has('author')) {
-		db.exec("ALTER TABLE features ADD COLUMN author TEXT");
-	}
-	if (!colNames.has('last_modified_by')) {
-		db.exec("ALTER TABLE features ADD COLUMN last_modified_by TEXT");
+function addColumnIfMissing(db: Database.Database, table: string, column: string, type: string): void {
+	const cols = db.prepare(`PRAGMA table_info('${table}')`).all() as { name: string }[];
+	if (!cols.some(c => c.name === column)) {
+		db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
 	}
 }
 
+function runMigrations(db: Database.Database): void {
+	// v0 → v1: features columns
+	addColumnIfMissing(db, 'features', 'author', 'TEXT');
+	addColumnIfMissing(db, 'features', 'last_modified_by', 'TEXT');
+
+	// v1: DB-only content columns
+	addColumnIfMissing(db, 'features', 'definition', 'TEXT');
+	addColumnIfMissing(db, 'features', 'description', 'TEXT');
+	addColumnIfMissing(db, 'features', 'session_log', 'TEXT');
+	addColumnIfMissing(db, 'features', 'requirements_status', 'TEXT');
+	addColumnIfMissing(db, 'features', 'plans_status', 'TEXT');
+	addColumnIfMissing(db, 'features', 'pending_discoveries', 'TEXT');
+
+	// v1: projects content columns
+	addColumnIfMissing(db, 'projects', 'definition', 'TEXT');
+	addColumnIfMissing(db, 'projects', 'overview', 'TEXT');
+
+	// v1: knowledge_docs source tracking
+	addColumnIfMissing(db, 'knowledge_docs', 'source', "TEXT DEFAULT 'manual'");
+
+	// v1: make file_path nullable (was UNIQUE NOT NULL, now optional)
+	// SQLite can't ALTER constraints, but new rows can have NULL file_path
+}
+
 export interface Settings {
-	// paths to shared knowledge MD files (cross-project patterns, conventions, libraries)
-	knowledge_paths: string[];
-	// default path where project feature docs are stored
-	default_projects_path: string;
-	// per-project path overrides (project name → custom path)
-	project_overrides: Record<string, string>;
+	// root path for plugin memory (contains projects/ and knowledge/ subdirectories)
+	memory_path: string;
 }

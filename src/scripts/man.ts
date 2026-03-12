@@ -10,7 +10,7 @@ interface SkillInfo {
 	command: string;
 	description: string;
 	parameters: string;
-	category: 'setup' | 'feature-lifecycle' | 'development' | 'sync' | 'info';
+	category: 'setup' | 'feature-lifecycle' | 'development' | 'info';
 }
 
 interface ScriptInfo {
@@ -60,10 +60,9 @@ function parseSkillMd(path: string): { description: string; parameters: string; 
 }
 
 function categorize(name: string): SkillInfo['category'] {
-	if (['setup', 'project-init'].includes(name)) return 'setup';
+	if (['project-init', 'setup-permissions'].includes(name)) return 'setup';
 	if (name.startsWith('feature-')) return 'feature-lifecycle';
-	if (['session-save', 'discover-patterns', 'requirements-sync'].includes(name)) return 'development';
-	if (name === 'sync') return 'sync';
+	if (['session-save', 'discover-patterns'].includes(name)) return 'development';
 	return 'info';
 }
 
@@ -89,7 +88,7 @@ function loadSkills(): SkillInfo[] {
 	} catch { /* skills dir not found */ }
 
 	return skills.sort((a, b) => {
-		const catOrder = ['setup', 'feature-lifecycle', 'development', 'sync', 'info'];
+		const catOrder = ['setup', 'feature-lifecycle', 'development', 'info'];
 		return catOrder.indexOf(a.category) - catOrder.indexOf(b.category) || a.name.localeCompare(b.name);
 	});
 }
@@ -97,23 +96,9 @@ function loadSkills(): SkillInfo[] {
 function loadScripts(): ScriptInfo[] {
 	return [
 		{
-			name: 'sync',
-			file: 'sync.cjs',
-			description: 'Sincronizza cartella documentale via git e riconcilia DB locale',
-			subcommands: ['pull', 'push', 'status', 'all (default)'],
-			usage: 'node sync.cjs [pull|push|status] [--json]',
-		},
-		{
-			name: 'sign',
-			file: 'sign.cjs',
-			description: 'Firma documenti markdown con footer autore e tag inline',
-			subcommands: ['footer <file> <desc>', 'tag'],
-			usage: 'node sign.cjs <footer|tag> [args]',
-		},
-		{
 			name: 'context-loader',
 			file: 'context-loader.cjs',
-			description: 'Carica tutto il contesto di una feature o progetto in JSON strutturato',
+			description: 'Carica contesto feature/progetto dal DB in JSON strutturato',
 			subcommands: ['<feature-name>', '--project <name>', '(none = all projects)'],
 			usage: 'node context-loader.cjs [feature|--project name] [--json]',
 		},
@@ -127,9 +112,16 @@ function loadScripts(): ScriptInfo[] {
 		{
 			name: 'feature-scaffold',
 			file: 'feature-scaffold.cjs',
-			description: 'Scaffolding, archiving e chiusura feature',
-			subcommands: ['init --name <n> --branch <b> --desc <d>', 'archive <feature>', 'close <feature> --reason <r> --status <s>'],
+			description: 'Init e close feature nel DB',
+			subcommands: ['init --name <n> --branch <b> --desc <d>', 'close <feature> --reason <r> --status <s>'],
 			usage: 'node feature-scaffold.cjs <command> [args] [--json]',
+		},
+		{
+			name: 'project-git',
+			file: 'project-git.cjs',
+			description: 'Git log/diff/status su un progetto registrato',
+			subcommands: ['<project> log', '<project> diff', '<project> status'],
+			usage: 'node project-git.cjs <project> <log|diff|status> [--json]',
 		},
 	];
 }
@@ -190,7 +182,6 @@ function main() {
 		'setup': '🔧 Setup',
 		'feature-lifecycle': '🔄 Feature Lifecycle',
 		'development': '💻 Sviluppo',
-		'sync': '🔁 Sincronizzazione',
 		'info': 'ℹ️  Info',
 	};
 
