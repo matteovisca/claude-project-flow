@@ -1,6 +1,3 @@
 node_modules/
-/scripts/dist/
-*.db
-*.db-journal
-.env
-plugin/node_modules/
+*.log
+.DS_Store
