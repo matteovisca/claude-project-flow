@@ -1,9 +1,0 @@
-{
-	"mcpServers": {
-		"project-flow": {
-			"type": "stdio",
-			"command": "node",
-			"args": ["plugin/scripts/dist/service.cjs"]
-		}
-	}
-}
