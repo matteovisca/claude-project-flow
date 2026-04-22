@@ -10,7 +10,7 @@
 	"plugins": [
 		{
 			"name": "claude-project-flow",
-			"version": "0.2.0",
+			"version": "0.3.0",
 			"source": "./plugin",
 			"description": "Per-project workflow orchestrator: feature lifecycle, requirements, plans, docs — filesystem-only markdown."
 		}
