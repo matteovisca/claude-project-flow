@@ -78,6 +78,12 @@ function findProjectRoot(start) {
   }
   return (0, import_node_path.resolve)(start);
 }
+function featureDir(projectFlowDir, slug) {
+  if (!/^[A-Za-z0-9_-]+$/.test(slug)) {
+    throw new Error(`invalid slug: ${slug}`);
+  }
+  return (0, import_node_path.join)(projectFlowDir, "features", slug);
+}
 
 // src/cli/commands/validate-config.ts
 function validateConfig(args2) {
@@ -115,6 +121,67 @@ function emit(result, json, hint) {
   }
 }
 
+// src/cli/commands/context.ts
+var import_node_fs3 = require("node:fs");
+var import_node_path3 = require("node:path");
+
+// src/cli/lib/git.ts
+var import_node_child_process = require("node:child_process");
+function currentBranch(cwd) {
+  try {
+    const out = (0, import_node_child_process.execSync)("git branch --show-current", { cwd, encoding: "utf-8" });
+    return out.trim() || null;
+  } catch {
+    return null;
+  }
+}
+function extractSlug(branch, pattern) {
+  const escaped = pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/<slug>/g, "([A-Za-z0-9_-]+)");
+  const re = new RegExp(`^${escaped}$`);
+  const m = branch.match(re);
+  return m?.[1] ?? null;
+}
+
+// src/cli/commands/context.ts
+function context(args2) {
+  const json = args2.includes("--json");
+  const ctx = resolveProjectContext();
+  if (!ctx.configExists) {
+    emitError(json, "config.md not found", "run /project-flow:start-feature to scaffold");
+    return 2;
+  }
+  const parsed = parseConfig((0, import_node_path3.join)(ctx.projectFlowDir, "config.md"));
+  const branch = currentBranch(ctx.projectRoot);
+  let feature = null;
+  if (branch && parsed.branch?.feature) {
+    feature = extractSlug(branch, parsed.branch.feature);
+  }
+  const result = {
+    project: parsed.identity?.name ?? null,
+    family: parsed.identity?.family ?? null,
+    branch,
+    feature,
+    feature_dir: feature && (0, import_node_fs3.existsSync)(featureDir(ctx.projectFlowDir, feature)) ? featureDir(ctx.projectFlowDir, feature) : null,
+    plugins: parsed.plugins ?? {},
+    announce: parsed.workflow?.announceDefault ?? "hybrid"
+  };
+  if (json) {
+    console.log(JSON.stringify(result));
+  } else {
+    console.log(`project: ${result.project ?? "?"} (${result.family ?? "?"})`);
+    console.log(`branch:  ${result.branch ?? "(not in git)"}`);
+    console.log(`feature: ${result.feature ?? "(none)"}`);
+  }
+  return 0;
+}
+function emitError(json, error, hint) {
+  if (json) console.log(JSON.stringify({ error, hint }));
+  else {
+    console.error(`error: ${error}`);
+    console.error(`hint: ${hint}`);
+  }
+}
+
 // src/cli/index.ts
 var cmd = process.argv[2];
 var args = process.argv.slice(3);
@@ -123,6 +190,7 @@ async function main() {
     case "validate-config":
       process.exit(validateConfig(args));
     case "context":
+      process.exit(context(args));
     case "start-feature":
     case "next-number":
       console.error(`not implemented: ${cmd}`);

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { validateConfig } from "./commands/validate-config.js";
+import { context } from "./commands/context.js";
 
 const cmd = process.argv[2];
 const args = process.argv.slice(3);
@@ -9,6 +10,7 @@ async function main() {
 		case "validate-config":
 			process.exit(validateConfig(args));
 		case "context":
+			process.exit(context(args));
 		case "start-feature":
 		case "next-number":
 			console.error(`not implemented: ${cmd}`);
