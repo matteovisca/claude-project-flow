@@ -1,0 +1,17 @@
+{
+	"description": "claude-project-flow session startup check",
+	"hooks": {
+		"SessionStart": [
+			{
+				"matcher": "startup",
+				"hooks": [
+					{
+						"type": "command",
+						"command": "_R=\"${CLAUDE_PLUGIN_ROOT}\"; [ -f \"$_R/bin/pf\" ] && \"$_R/bin/pf\" validate-config 2>&1 || true",
+						"timeout": 5
+					}
+				]
+			}
+		]
+	}
+}

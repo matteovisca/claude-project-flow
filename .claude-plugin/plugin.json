@@ -7,5 +7,11 @@
 	},
 	"repository": "https://github.com/matteovisca/claude-project-flow",
 	"license": "MIT",
-	"keywords": ["claude", "claude-code", "plugin", "workflow", "feature-lifecycle"]
+	"keywords": [
+		"claude",
+		"claude-code",
+		"plugin",
+		"workflow",
+		"feature-lifecycle"
+	]
 }
