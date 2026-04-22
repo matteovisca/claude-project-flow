@@ -38,9 +38,7 @@ export function validateConfig(args: string[]): number {
 
 function emit(result: Result, json: boolean, hint?: string): void {
 	if (json) {
-		// include "error" (singular) for compatibility with callers expecting that key
-		const error = result.errors.length > 0 ? result.errors[0] : undefined;
-		console.log(JSON.stringify({ ...result, error, hint }));
+		console.log(JSON.stringify({ ...result, hint }));
 	} else {
 		if (result.ok) console.log("config ok");
 		for (const w of result.warnings) console.log(`warning: ${w}`);

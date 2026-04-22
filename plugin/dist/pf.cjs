@@ -106,8 +106,7 @@ function validateConfig(args2) {
 }
 function emit(result, json, hint) {
   if (json) {
-    const error = result.errors.length > 0 ? result.errors[0] : void 0;
-    console.log(JSON.stringify({ ...result, error, hint }));
+    console.log(JSON.stringify({ ...result, hint }));
   } else {
     if (result.ok) console.log("config ok");
     for (const w of result.warnings) console.log(`warning: ${w}`);
