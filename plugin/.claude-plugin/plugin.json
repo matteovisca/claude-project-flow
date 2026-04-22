@@ -1,20 +1,11 @@
 {
 	"name": "claude-project-flow",
-	"version": "0.1.0",
-	"description": "Project workflow management with feature lifecycle, knowledge base, and cross-project search",
+	"version": "0.2.0",
+	"description": "Per-project workflow orchestrator: feature lifecycle, requirements, plans, docs — filesystem-only markdown.",
 	"author": {
 		"name": "Matteo Visca"
 	},
 	"repository": "https://github.com/matteovisca/claude-project-flow",
 	"license": "MIT",
-	"keywords": [
-		"claude",
-		"claude-code",
-		"plugin",
-		"project-management",
-		"feature-lifecycle",
-		"knowledge-base",
-		"workflow",
-		"mcp"
-	]
+	"keywords": ["claude", "claude-code", "plugin", "workflow", "feature-lifecycle"]
 }
