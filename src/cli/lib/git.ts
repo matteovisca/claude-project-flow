@@ -17,5 +17,5 @@ export function extractSlug(branch: string, pattern: string): string | null {
 	const escaped = pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/<slug>/g, "([A-Za-z0-9_-]+)");
 	const re = new RegExp(`^${escaped}$`);
 	const m = branch.match(re);
-	return m ? m[1] : null;
+	return m?.[1] ?? null;
 }

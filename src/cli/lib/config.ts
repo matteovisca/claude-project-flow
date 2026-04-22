@@ -23,7 +23,7 @@ export function parseConfig(path: string): ParsedConfig {
 		if (!trimmed.startsWith("-")) continue;
 
 		const body = trimmed.slice(1).trim();
-		const match = body.match(/^([a-zA-Z0-9_.-]+):\s*(.+?)(?:\s*#.*)?$/);
+		const match = body.match(/^([a-zA-Z0-9_.-]+):\s*(.+?)(?:\s+#.*)?$/);
 		if (!match) continue;
 		const [, key, valueRaw] = match;
 		const value = valueRaw.replace(/^`|`$/g, "").trim();

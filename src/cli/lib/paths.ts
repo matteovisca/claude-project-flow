@@ -15,13 +15,18 @@ export function resolveProjectContext(cwd: string = process.cwd()): ProjectConte
 
 function findProjectRoot(start: string): string {
 	let dir = resolve(start);
-	while (dir !== "/") {
+	while (true) {
 		if (existsSync(join(dir, ".git"))) return dir;
-		dir = resolve(dir, "..");
+		const parent = resolve(dir, "..");
+		if (parent === dir) break;
+		dir = parent;
 	}
 	return resolve(start);
 }
 
 export function featureDir(projectFlowDir: string, slug: string): string {
+	if (!/^[A-Za-z0-9_-]+$/.test(slug)) {
+		throw new Error(`invalid slug: ${slug}`);
+	}
 	return join(projectFlowDir, "features", slug);
 }
