@@ -208,6 +208,84 @@ function nextNumber(args2) {
   return 0;
 }
 
+// src/cli/commands/start-feature.ts
+var import_node_child_process2 = require("node:child_process");
+var import_node_fs5 = require("node:fs");
+var import_node_path5 = require("node:path");
+function startFeature(args2) {
+  const opts = parseArgs(args2);
+  if (!opts.slug) {
+    console.error("usage: pf start-feature <slug> [--branch <b>] [--from <base>] [--json]");
+    return 2;
+  }
+  const ctx = resolveProjectContext();
+  const dir = featureDir(ctx.projectFlowDir, opts.slug);
+  if ((0, import_node_fs5.existsSync)(dir)) {
+    const err = { error: `feature ${opts.slug} already exists`, hint: "checkout the branch manually or choose a different slug" };
+    if (opts.json) console.log(JSON.stringify(err));
+    else console.error(err.error);
+    return 1;
+  }
+  const branchName = opts.branch ?? `feature/${opts.slug}`;
+  try {
+    (0, import_node_child_process2.execSync)(`git checkout -b ${branchName}${opts.from ? ` ${opts.from}` : ""}`, { cwd: ctx.projectRoot, stdio: "pipe" });
+  } catch (e) {
+    const err = { error: `git checkout failed: ${e.message}`, hint: "ensure working tree is clean" };
+    if (opts.json) console.log(JSON.stringify(err));
+    else console.error(err.error);
+    return 2;
+  }
+  (0, import_node_fs5.mkdirSync)((0, import_node_path5.join)(dir, "requirements"), { recursive: true });
+  (0, import_node_fs5.mkdirSync)((0, import_node_path5.join)(dir, "plans"), { recursive: true });
+  const author = safeGit("git config user.name", ctx.projectRoot) ?? "unknown";
+  const created = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+  const contextBody = `---
+status: draft
+slug: ${opts.slug}
+branch: ${branchName}
+created_at: ${created}
+author: ${author}
+---
+
+# Feature: ${opts.slug}
+
+## Sessions
+- ${created} \u2014 feature started
+
+## Plans
+_(none yet \u2014 use /project-flow:plan)_
+
+## Requirements updates
+_(none yet \u2014 use /project-flow:requirements)_
+`;
+  (0, import_node_fs5.writeFileSync)((0, import_node_path5.join)(dir, "context.md"), contextBody);
+  const result = { slug: opts.slug, branch: branchName, featureDir: dir, next: "invoke /project-flow:requirements" };
+  if (opts.json) console.log(JSON.stringify(result));
+  else {
+    console.log(`feature ${opts.slug} created on ${branchName}`);
+    console.log(`next: invoke /project-flow:requirements`);
+  }
+  return 0;
+}
+function parseArgs(args2) {
+  const opts = { slug: "", json: false };
+  for (let i = 0; i < args2.length; i++) {
+    const a = args2[i];
+    if (a === "--branch") opts.branch = args2[++i];
+    else if (a === "--from") opts.from = args2[++i];
+    else if (a === "--json") opts.json = true;
+    else if (!opts.slug) opts.slug = a;
+  }
+  return opts;
+}
+function safeGit(cmd2, cwd) {
+  try {
+    return (0, import_node_child_process2.execSync)(cmd2, { cwd, encoding: "utf-8" }).trim() || null;
+  } catch {
+    return null;
+  }
+}
+
 // src/cli/index.ts
 var cmd = process.argv[2];
 var args = process.argv.slice(3);
@@ -220,8 +298,7 @@ async function main() {
     case "next-number":
       process.exit(nextNumber(args));
     case "start-feature":
-      console.error(`not implemented: ${cmd}`);
-      process.exit(1);
+      process.exit(startFeature(args));
     default:
       console.error(`usage: pf <context|start-feature|next-number|validate-config> [args]`);
       process.exit(2);
