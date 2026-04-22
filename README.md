@@ -1,220 +1,97 @@
 # claude-project-flow
 
-Plugin per Claude Code che gestisce il workflow di progetto: feature lifecycle, knowledge base cross-project, sincronizzazione documentale e collaborazione team.
+Per-project workflow orchestrator plugin for Claude Code. Filesystem-only, versioned with git, no DB, no MCP, no dashboard.
 
-## Installazione
+## What it does
 
-### Prerequisiti
+Manages feature lifecycle for a single project: create feature branch + scaffold folder, collect requirements, create plans (delegating to installed plugins like `superpowers`), generate final docs, close feature.
 
-- [Claude Code](https://claude.com/claude-code) installato
-- Node.js >= 18
+All state lives in `.project-flow/` inside your project repo, as markdown files you can read and edit by hand.
 
-### Da marketplace (consigliato)
-
-```bash
-claude plugin add matteovisca/claude-project-flow
-```
-
-Claude Code scarica il plugin, installa le dipendenze runtime (`better-sqlite3`) e registra skill, hook e MCP server automaticamente.
-
-### Da sorgente (sviluppatori)
+## Installation
 
 ```bash
-git clone https://github.com/matteovisca/claude-project-flow.git
-cd claude-project-flow
-npm install
-npm run build
+claude plugin install matteovisca/claude-project-flow
 ```
 
-Il build compila i sorgenti TypeScript, genera la distribuzione in `plugin/` e, se il plugin è già installato localmente, aggiorna automaticamente la cache in `~/.claude/plugins/cache/`.
-
-Dopo il build, riavvia Claude Code per caricare le modifiche.
-
-### Installazione manuale
-
-Se il marketplace non è disponibile, copia la cartella `plugin/` nella cache:
+## Quick start
 
 ```bash
-mkdir -p ~/.claude/plugins/cache/matteovisca/claude-project-flow/0.1.0
-cp -r plugin/* ~/.claude/plugins/cache/matteovisca/claude-project-flow/0.1.0/
+cd your-project
+# First time setup:
+/project-flow:start-feature export-csv
+# → creates branch feature/export-csv + .project-flow/features/export-csv/
+
+/project-flow:requirements
+# → dialog → saves requirements/001-initial.md
+
+/project-flow:plan
+# → delegates to superpowers:writing-plans → plans/001-export-csv.md
+
+# ... implement ...
+
+/project-flow:close-feature
+# → generates docs/overview.md + implementation.md + edge-cases.md
+# → optionally merges branch
 ```
 
-Poi registra il plugin in `~/.claude/plugins/installed_plugins.json`.
+## Commands
 
-## Aggiornamento
+| Command | Purpose |
+|---------|---------|
+| `/project-flow:start-feature <slug>` | New feature: branch + folder scaffold |
+| `/project-flow:requirements` | Collect/update requirements via dialog |
+| `/project-flow:plan` | Create implementation plan (delegates to superpowers if installed) |
+| `/project-flow:close-feature` | Generate docs + optional merge + mark closed |
+| `/project-flow:man [skill]` | Inline reference |
 
-### Da marketplace
-
-```bash
-claude plugin update matteovisca/claude-project-flow
-```
-
-### Da sorgente
-
-```bash
-git pull
-npm install
-npm run build
-```
-
-Il build script rileva l'installazione locale e sovrascrive la cache automaticamente. Riavvia Claude Code dopo il build.
-
-### Verificare la versione installata
-
-```bash
-cat ~/.claude/plugins/cache/matteovisca/claude-project-flow/0.1.0/.claude-plugin/plugin.json | grep version
-```
-
-## Prima configurazione
-
-Dopo l'installazione, configura i path nella prima sessione:
+## Folder structure
 
 ```
-/claude-project-flow:setup
+your-project/
+└── .project-flow/
+    ├── config.md                   ← per-project adaptation
+    ├── context.md                  ← cross-feature living state
+    └── features/
+        └── <slug>/
+            ├── context.md
+            ├── requirements/       ← NNN-*.md
+            ├── plans/              ← NNN-*.md
+            ├── research/           ← on-demand
+            ├── design/             ← on-demand
+            └── docs/               ← generated at close
 ```
 
-Setup chiede:
-- **Projects path** — dove salvare la documentazione dei progetti (es. `~/Documents/DevAiMemory/Projects`)
-- **Knowledge paths** — cartelle condivise per pattern e convenzioni cross-project
+## Configuration
 
-Poi registra il primo progetto:
+On first `/project-flow:start-feature`, a default `.project-flow/config.md` is created. Edit to customize:
 
-```
-/claude-project-flow:project-init
-```
+- Branch conventions (e.g. `feature/<slug>` vs `US-<n>-<slug>`)
+- Folder layout overrides (if you already have `docs/adr/` etc.)
+- Plugin mapping (`plan: superpowers:writing-plans` by default — change per project)
+- Workflow rules (announce default, cross-review policy)
 
-## Skill disponibili
+## External dependencies
 
-### Setup
-| Comando | Descrizione |
-|---------|-------------|
-| `/setup` | Configura i path per knowledge base, progetti e override |
-| `/project-init` | Analizza il codebase, crea project-definition.md, registra nel DB |
+The plugin itself has **zero runtime dependencies** (only Node.js ≥18). Optional external plugins can be invoked for specific scopes — configured via `config.md`:
 
-### Feature Lifecycle
-| Comando | Descrizione |
-|---------|-------------|
-| `/feature-init` | Crea branch, directory, definition e registra nel DB |
-| `/feature-requirements` | Raccoglie requisiti dettagliati con dialogo strutturato |
-| `/feature-plan` | Crea e gestisce piani di implementazione |
-| `/feature-list` | Dashboard feature con status e avanzamento |
-| `/feature-docs` | Genera documentazione dalla feature |
-| `/feature-merge` | Merge branch feature su main con archiving |
-| `/feature-close` | Chiude/cancella feature senza merge |
+- `superpowers:writing-plans` — recommended for `/project-flow:plan`
+- `superpowers:test-driven-development` — optional, manifesto-style
+- `codex:rescue` — v2, cross-review
 
-### Sviluppo
-| Comando | Descrizione |
-|---------|-------------|
-| `/session-save` | Sincronizza progresso sessione con i documenti |
-| `/discover-patterns` | Rileva pattern e dipendenze dal git diff |
-| `/requirements-sync` | Scansiona cartella requirements per aggiornamenti |
+If a mapped plugin isn't installed, the session-start hook warns (non-blocking).
 
-### Sincronizzazione (team)
-| Comando | Descrizione |
-|---------|-------------|
-| `/sync` | Pull + riconcilia DB + push (flusso completo) |
-| `/sync pull` | Git pull + aggiornamento DB locale |
-| `/sync push` | Commit automatico + push |
-| `/sync status` | Mostra stato sincronizzazione e differenze DB/file |
+## Philosophy
 
-### Info
-| Comando | Descrizione |
-|---------|-------------|
-| `/man` | Manuale interattivo con tutti i comandi e workflow |
-| `/man <nome>` | Dettagli su un comando specifico |
+- **Per-project**: scope limited to one project, not a cross-project knowledge manager
+- **Filesystem-only**: markdown + git. Anything more (DB, MCP, dashboard) was overkill in previous versions
+- **Delegate, don't reinvent**: leverage ecosystem plugins for specialized phases
+- **Announce, never magic**: every routing to an external plugin is announced before invocation
 
-Tutti i comandi vanno prefissati con `claude-project-flow:` (es. `/claude-project-flow:feature-init`).
+## Status
 
-## Script standalone
+v0.2.0 — MVP. See [docs/superpowers/specs/](docs/superpowers/specs/) for design and [docs/superpowers/plans/](docs/superpowers/plans/) for implementation plan.
 
-Gli script sono eseguibili da terminale senza Claude Code. Si trovano in `plugin/scripts/dist/`.
-
-```bash
-# sincronizzazione documentale
-node sync.cjs [pull|push|status] [--json]
-
-# firma documenti markdown
-node sign.cjs footer <file> "<descrizione>"
-node sign.cjs tag
-
-# carica contesto feature/progetto
-node context-loader.cjs <feature-name> [--json]
-node context-loader.cjs --project <nome> [--json]
-node context-loader.cjs [--json]              # tutti i progetti
-
-# operazioni git pre-processate
-node git-ops.cjs diff [base] [--json]
-node git-ops.cjs log [count] [--json]
-node git-ops.cjs merge-check [target] [--json]
-node git-ops.cjs branch-info [--json]
-
-# scaffolding feature
-node feature-scaffold.cjs init --name <n> --branch <b> --desc "<d>" [--json]
-node feature-scaffold.cjs archive <feature> [--json]
-node feature-scaffold.cjs close <feature> --reason "<r>" --status <s> [--json]
-
-# manuale
-node man.cjs [nome-skill]
-```
-
-Tutti gli script supportano `--json` per output strutturato (utile per automazione e integrazione).
-
-## Workflow tipico
-
-```
-1. /setup                    — configura path (una volta)
-2. /project-init             — registra progetto (una volta per progetto)
-3. /feature-init             — crea branch e struttura documentale
-4. /feature-requirements     — definisci requisiti interattivamente
-5. /feature-plan             — pianifica l'implementazione
-6. ...implementa...
-7. /session-save             — salva progresso sessione
-8. /discover-patterns        — rileva pattern dal codice
-9. /feature-docs             — genera documentazione
-10. /feature-merge           — merge su main e archivia
-```
-
-### Collaborazione team
-
-La cartella documentale (projects path) può essere una repo git condivisa:
-
-```
-/sync pull     — aggiorna dalla repo condivisa + sincronizza DB locale
-...lavora...
-/sync push     — committa e pusha le modifiche documentali
-/sync status   — verifica stato sincronizzazione
-```
-
-Ogni documento include firma autore (git user) e tag inline per tracciare le modifiche.
-
-## Stack
-
-- TypeScript + esbuild → CJS bundle
-- SQLite (better-sqlite3) con WAL mode
-- MCP SDK per tool registration
-- FTS5 per ricerca full-text cross-project
-
-## Struttura progetto
-
-```
-claude-project-flow/
-├── src/                    — sorgenti TypeScript
-│   ├── db/                 — schema e database
-│   ├── hooks/              — session lifecycle hooks
-│   ├── server/             — MCP server e tool handlers
-│   ├── sync/               — sync engine (parser, scanner, reconciler)
-│   ├── utils/              — utilities (git-user, doc-signature)
-│   └── scripts/            — CLI scripts standalone
-├── skills/                 — SKILL.md per ogni comando
-├── hooks/                  — hooks.json configuration
-├── scripts/                — build pipeline
-└── plugin/                 — distribuzione compilata
-    ├── .claude-plugin/     — manifest e metadata
-    ├── scripts/dist/       — script compilati
-    ├── skills/             — skill copiate
-    └── hooks/              — hooks copiati
-```
-
-## Licenza
+## License
 
 MIT
