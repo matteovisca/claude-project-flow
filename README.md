@@ -64,7 +64,7 @@ your-project/
 
 ## Configuration
 
-On first `/project-flow:start-feature`, a default `.project-flow/config.md` is created. Edit to customize:
+If `.project-flow/config.md` doesn't exist when you invoke `/project-flow:start-feature`, the skill will guide you through creating one. Edit to customize:
 
 - Branch conventions (e.g. `feature/<slug>` vs `US-<n>-<slug>`)
 - Folder layout overrides (if you already have `docs/adr/` etc.)

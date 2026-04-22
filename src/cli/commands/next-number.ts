@@ -10,6 +10,12 @@ export function nextNumber(args: string[]): number {
 	}
 
 	const [slug, type] = target.split("/", 2);
+
+	if (!/^[a-z0-9_-]+$/.test(slug) || !/^[a-z0-9_-]+$/.test(type)) {
+		console.error("invalid slug/type: lowercase alphanumeric, hyphens, underscores only");
+		return 2;
+	}
+
 	const ctx = resolveProjectContext();
 	const dir = join(ctx.projectFlowDir, "features", slug, type);
 

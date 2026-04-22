@@ -1,4 +1,4 @@
-import { execSync } from "node:child_process";
+import { execSync, execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { resolveProjectContext, featureDir } from "../lib/paths.js";
@@ -17,6 +17,13 @@ export function startFeature(args: string[]): number {
 		return 2;
 	}
 
+	if (!/^[a-z0-9_-]+$/.test(opts.slug)) {
+		const err = { error: `invalid slug "${opts.slug}"`, hint: "use only lowercase letters, digits, hyphens, underscores" };
+		if (opts.json) console.log(JSON.stringify(err));
+		else console.error(err.error);
+		return 2;
+	}
+
 	const ctx = resolveProjectContext();
 	const dir = featureDir(ctx.projectFlowDir, opts.slug);
 
@@ -27,10 +34,22 @@ export function startFeature(args: string[]): number {
 		return 1;
 	}
 
-	// create branch
+	// create or checkout branch
 	const branchName = opts.branch ?? `feature/${opts.slug}`;
 	try {
-		execSync(`git checkout -b ${branchName}${opts.from ? ` ${opts.from}` : ""}`, { cwd: ctx.projectRoot, stdio: "pipe" });
+		// Check if branch already exists
+		let branchExists = false;
+		try {
+			execFileSync("git", ["show-ref", "--verify", "--quiet", `refs/heads/${branchName}`], { cwd: ctx.projectRoot, stdio: "pipe" });
+			branchExists = true;
+		} catch {
+			branchExists = false;
+		}
+
+		const gitArgs = branchExists
+			? ["checkout", branchName]
+			: ["checkout", "-b", branchName, ...(opts.from ? [opts.from] : [])];
+		execFileSync("git", gitArgs, { cwd: ctx.projectRoot, stdio: "pipe" });
 	} catch (e) {
 		const err = { error: `git checkout failed: ${(e as Error).message}`, hint: "ensure working tree is clean" };
 		if (opts.json) console.log(JSON.stringify(err));

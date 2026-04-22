@@ -25,7 +25,7 @@ function findProjectRoot(start: string): string {
 }
 
 export function featureDir(projectFlowDir: string, slug: string): string {
-	if (!/^[A-Za-z0-9_-]+$/.test(slug)) {
+	if (!/^[a-z0-9_-]+$/.test(slug)) {
 		throw new Error(`invalid slug: ${slug}`);
 	}
 	return join(projectFlowDir, "features", slug);

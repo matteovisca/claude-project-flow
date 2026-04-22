@@ -236,7 +236,7 @@ pf validate-config [--json]
 1. **Deterministico**: stesso input → stesso output
 2. **JSON-first**: skill parsano JSON, non testo
 3. **Fail-safe**: errori strutturati con `error` + `hint`, mai stack trace
-4. **Tetto hard**: <200 LOC Node in v1
+4. **Tetto hard**: ≤500 LOC sorgente TypeScript in v1 (split CLI + lib)
 5. **Niente state**: legge filesystem + git, scrive file markdown nel progetto cliente
 6. **Cosa il CLI NON farà mai**: routing plugin, dialogo, orchestrazione inter-agente, persistenza propria
 
@@ -358,7 +358,7 @@ Il plugin attuale (`V1_Db_Only` locale, `rebuild structure` su GitHub) verrà **
 ## 11. Principi non negoziabili (contratto)
 
 1. **No DB, no MCP, no dashboard**: filesystem markdown + git sono la fonte di verità
-2. **CLI `pf` <200 LOC in v1**: se ci avviciniamo, ci fermiamo e riconsideriamo prima di aggiungere
+2. **CLI `pf` ≤500 LOC sorgente TypeScript in v1** (post-split in lib/): il tetto originale era 200 LOC ma lo split in lib/ per separation of concerns ha portato il totale a ~400. Se superiamo 500, ci fermiamo.
 3. **Skill = dialogo e orchestrazione, CLI = determinismo**: confine netto, mai sovrapporsi
 4. **Annuncio sempre prima di azioni**: mai routing silenzioso
 5. **Config.md opzionale per funzionare, obbligatorio per override**: il plugin funziona con default anche senza config custom
