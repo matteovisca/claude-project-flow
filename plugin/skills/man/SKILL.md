@@ -18,6 +18,7 @@ When invoked without arguments, output this table:
 
 | Command | Purpose |
 |---------|---------|
+| `/project-flow:init` | Bootstrap project: scaffold .project-flow/config.md + context.md |
 | `/project-flow:start-feature <slug>` | Create branch + scaffold .project-flow/features/<slug>/ |
 | `/project-flow:requirements` | Dialog to collect/update feature requirements |
 | `/project-flow:plan` | Delegate to superpowers:writing-plans, save in plans/ |

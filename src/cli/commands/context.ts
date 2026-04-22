@@ -9,7 +9,7 @@ export function context(args: string[]): number {
 	const ctx = resolveProjectContext();
 
 	if (!ctx.configExists) {
-		emitError(json, "config.md not found", "run /project-flow:start-feature to scaffold");
+		emitError(json, "config.md not found", "run /project-flow:init to scaffold");
 		return 2;
 	}
 

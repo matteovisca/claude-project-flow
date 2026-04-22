@@ -16,7 +16,7 @@ export function validateConfig(args: string[]): number {
 	if (!ctx.configExists) {
 		result.ok = false;
 		result.errors.push("config.md not found at .project-flow/config.md");
-		emit(result, json, "no config — run /project-flow:start-feature to scaffold");
+		emit(result, json, "no config — run /project-flow:init to scaffold");
 		return 2;
 	}
 

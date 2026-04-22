@@ -18,9 +18,13 @@ claude plugin install matteovisca/claude-project-flow
 
 ```bash
 cd your-project
-# First time setup:
+# First time setup (one-off per project):
+/project-flow:init
+# → scaffolds .project-flow/config.md + .project-flow/context.md
+
 /project-flow:start-feature export-csv
 # → creates branch feature/export-csv + .project-flow/features/export-csv/
+# (if config is missing, start-feature will offer to run init automatically)
 
 /project-flow:requirements
 # → dialog → saves requirements/001-initial.md
@@ -39,6 +43,7 @@ cd your-project
 
 | Command | Purpose |
 |---------|---------|
+| `/project-flow:init` | Bootstrap project: scaffold `.project-flow/config.md` + `context.md` |
 | `/project-flow:start-feature <slug>` | New feature: branch + folder scaffold |
 | `/project-flow:requirements` | Collect/update requirements via dialog |
 | `/project-flow:plan` | Create implementation plan (delegates to superpowers if installed) |
@@ -64,7 +69,7 @@ your-project/
 
 ## Configuration
 
-If `.project-flow/config.md` doesn't exist when you invoke `/project-flow:start-feature`, the skill will guide you through creating one. Edit to customize:
+Run `/project-flow:init` once per project to scaffold `.project-flow/config.md`. If missing when you invoke `/project-flow:start-feature`, the skill will offer to run `init` for you (announce-then-proceed). Edit to customize:
 
 - Branch conventions (e.g. `feature/<slug>` vs `US-<n>-<slug>`)
 - Folder layout overrides (if you already have `docs/adr/` etc.)
