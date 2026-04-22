@@ -14,83 +14,32 @@ Start a new feature in the current project. Creates git branch and scaffolds the
 ## Preconditions
 
 1. The current directory is a git repo
-2. `.project-flow/config.md` exists (if not, propose creating it first — see "Bootstrap" below)
+2. `.project-flow/config.md` exists (if missing → delegate to `/project-flow:init`, see below)
 3. Working tree is clean (or warn user)
 
 ## Procedure
 
 1. **Read context**: run `${CLAUDE_PLUGIN_ROOT}/bin/pf context --json` to confirm project is recognized.
-2. **Validate slug**: reject if contains spaces, uppercase letters, or special characters other than `-` and `_`.
-3. **Ask for optional one-line description** (skip if user provides it upfront).
-4. **Announce intent** (this is an irreversible action — ask for confirmation):
+2. **If config is missing** (`error: config.md not found`): **delegate to init** — see section below. Do NOT inline the bootstrap here.
+3. **Validate slug**: reject if contains spaces, uppercase letters, or special characters other than `-` and `_`.
+4. **Ask for optional one-line description** (skip if user provides it upfront).
+5. **Announce intent** (this is an irreversible action — ask for confirmation):
    > "I'll create branch `feature/<slug>` and scaffold `.project-flow/features/<slug>/`. Confirm?"
-5. **Invoke CLI**: `${CLAUDE_PLUGIN_ROOT}/bin/pf start-feature <slug> --branch feature/<slug> --json`
-6. **Parse output**: on success, extract `slug`, `branch`, `featureDir`.
-7. **Suggest next step**: tell user to invoke `/project-flow:requirements` to collect initial requirements.
+6. **Invoke CLI**: `${CLAUDE_PLUGIN_ROOT}/bin/pf start-feature <slug> --branch feature/<slug> --json`
+7. **Parse output**: on success, extract `slug`, `branch`, `featureDir`.
+8. **Suggest next step**: tell user to invoke `/project-flow:requirements` to collect initial requirements.
 
-## Bootstrap case
+## Delegate to init when config is missing
 
-If `pf context` returns `error: config.md not found`:
-- Infer defaults: project name from git remote URL basename or current dir name; family=`standalone`; branch pattern=`feature/<slug>`
-- Offer to write `.project-flow/config.md` using the template below
-- Then retry the start-feature flow
+If `pf context` returns `error: config.md not found`, the project hasn't been bootstrapped yet. Do NOT scaffold inline. Instead:
 
-### config.md template
+1. **Announce** (verbatim):
+   > "Config assente. Invoco `/project-flow:init` ora, poi riprendo con la feature `<slug>`. Procedo?"
+2. On confirmation, **invoke the `init` skill** to scaffold `.project-flow/config.md` + `.project-flow/context.md`.
+3. After init completes successfully, **resume this skill from step 3** (slug validation) without re-prompting the user for the slug.
+4. If user declines the delegate, exit with hint: *"Run `/project-flow:init` manually when ready."*
 
-```markdown
-# Project Flow Config
-
-## Identity
-- name: <inferred>
-- family: standalone                   # roadmapp | grc | vids | library | standalone
-- stack: <stack if known>
-- description: <one line, optional>
-
-## Branch convention
-- feature: `feature/<slug>`
-# - us: `US-<n>-<slug>`                # enable if family=grc
-# - fix: `fix/<slug>`
-
-## Folder layout
-# features_dir: .project-flow/features
-# decisions_dir: docs/adr
-# design_dir: design/mockups
-
-## Plugin mapping
-- plan: superpowers:writing-plans
-- brainstorm: superpowers:brainstorming
-- tdd: superpowers:test-driven-development
-- review: superpowers:requesting-code-review
-
-## Workflow rules
-- cross_review: suggested              # suggested | required | off
-- scope_audit: off                     # v1.1
-- announce_default: hybrid             # hybrid | always-confirm | always-proceed
-
-## Glossary
-# - "user story" → requirements
-# - "spike" → research
-```
-
-Also scaffold `.project-flow/context.md` with:
-
-```markdown
----
-project: <inferred name>
-created_at: YYYY-MM-DD
----
-
-# Project context
-
-## Active feature
-_(none yet)_
-
-## Cross-feature decisions
-_(ADRs land here or in decisions/ — see config.md folder layout)_
-
-## Notes
-_(free-form project-level notes)_
-```
+This keeps `init` as the single owner of bootstrap logic (announce, never magic; delegate, don't reinvent).
 
 ## Announcement template (verbatim)
 

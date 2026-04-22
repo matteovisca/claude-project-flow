@@ -65,6 +65,7 @@ const required = [
 	"plugin/hooks/hooks.json",
 	"plugin/dist/pf.cjs",
 	"plugin/bin/pf",
+	"plugin/skills/init/SKILL.md",
 	"plugin/skills/start-feature/SKILL.md",
 	"plugin/skills/requirements/SKILL.md",
 	"plugin/skills/plan/SKILL.md",
