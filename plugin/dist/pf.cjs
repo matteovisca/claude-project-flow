@@ -182,6 +182,32 @@ function emitError(json, error, hint) {
   }
 }
 
+// src/cli/commands/next-number.ts
+var import_node_fs4 = require("node:fs");
+var import_node_path4 = require("node:path");
+function nextNumber(args2) {
+  const target = args2[0];
+  if (!target || !target.includes("/")) {
+    console.error("usage: pf next-number <slug>/<type>");
+    return 2;
+  }
+  const [slug, type] = target.split("/", 2);
+  const ctx = resolveProjectContext();
+  const dir = (0, import_node_path4.join)(ctx.projectFlowDir, "features", slug, type);
+  if (!(0, import_node_fs4.existsSync)(dir)) {
+    console.log("001");
+    return 0;
+  }
+  const files = (0, import_node_fs4.readdirSync)(dir).filter((f) => /^\d{3}-.*\.md$/.test(f));
+  let max = 0;
+  for (const f of files) {
+    const n = parseInt(f.slice(0, 3), 10);
+    if (n > max) max = n;
+  }
+  console.log(String(max + 1).padStart(3, "0"));
+  return 0;
+}
+
 // src/cli/index.ts
 var cmd = process.argv[2];
 var args = process.argv.slice(3);
@@ -191,8 +217,9 @@ async function main() {
       process.exit(validateConfig(args));
     case "context":
       process.exit(context(args));
-    case "start-feature":
     case "next-number":
+      process.exit(nextNumber(args));
+    case "start-feature":
       console.error(`not implemented: ${cmd}`);
       process.exit(1);
     default:
